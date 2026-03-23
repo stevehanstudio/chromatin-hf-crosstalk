@@ -4,6 +4,9 @@ data/
 # Pipeline outputs (Cell Ranger, bulk RNA-seq, etc.)
 output/
 
+# 10x Cell Ranger install tarballs
+cellranger*.tar.gz
+
 # Large bioinformatics intermediates (if any leak outside output/)
 *.bam
 *.bai

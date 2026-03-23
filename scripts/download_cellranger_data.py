@@ -61,13 +61,20 @@ CELLRANGER_RUNS = {
 }
 
 def download_with_curl(url: str, out_path: Path, expected_md5: str | None = None) -> bool:
-    """Download file using curl (more reliable for large files)."""
+    """Download file using curl. Uses 2h timeout and resume (-C -) for large files."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = ["curl", "-f", "-L", "-o", str(out_path), url]
+    cmd = [
+        "curl", "-f", "-L", "-C", "-",  # -C - enables resume for partial downloads
+        "--max-time", "7200",             # 2 hours per file
+        "--connect-timeout", "120",       # 2 min to establish connection
+        "-o", str(out_path), url,
+    ]
     try:
         subprocess.run(cmd, check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
         print(f"  Error: {e.stderr.decode() if e.stderr else e}", file=sys.stderr)
+        if out_path.exists():
+            out_path.unlink()  # Remove partial file so re-run will retry
         return False
 
     if expected_md5:
@@ -117,12 +124,18 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
     run_dir = out_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     ok = True
+    MIN_VALID_SIZE = 1000  # bytes; smaller = likely partial/failed
     for i, (u, m) in enumerate(zip(urls, md5s)):
         fname = Path(u).name
         out_path = run_dir / fname
-        if out_path.exists() and (not m or hashlib.md5(out_path.read_bytes()).hexdigest() == m):
-            print(f"  Skip (exists): {fname}")
-            continue
+        if out_path.exists():
+            if out_path.stat().st_size < MIN_VALID_SIZE:
+                out_path.unlink()  # Remove tiny/empty partial so we re-download
+            elif not m or hashlib.md5(out_path.read_bytes()).hexdigest() == m:
+                print(f"  Skip (exists): {fname}")
+                continue
+            else:
+                out_path.unlink()  # MD5 mismatch; remove so we re-download
         print(f"  Downloading {fname} ...")
         if not download_with_curl(u, out_path, m if md5_checks else None):
             ok = False
