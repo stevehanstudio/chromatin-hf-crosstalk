@@ -41,7 +41,7 @@ python scripts/download_cellranger_refs.py   # refs → data/refs/
 
 # Then run Cell Ranger (creates symlinks + cellranger count / cellranger-atac count)
 python scripts/run_cellranger.py --ref-scrna data/refs/refdata-gex-GRCm39-2024-A \
-                                --ref-atac data/refs/refdata-mm10-2020-A-atac
+                                --ref-atac data/refs/refdata-cellranger-arc-GRCm39-2024-A
 ```
 
 **Requirements:** Python 3.9+, `curl`. Optional: `sra-tools` for `--use-sra` (faster for large downloads). Cell Ranger references: see [INSTALL.md](INSTALL.md#6-cell-ranger-x86-only).

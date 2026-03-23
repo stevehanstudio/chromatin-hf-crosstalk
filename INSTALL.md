@@ -210,7 +210,7 @@ python scripts/download_cellranger_refs.py
 
 This fetches:
 - **scRNA:** refdata-gex-GRCm39-2024-A (~9.7 GB) for Cell Ranger 10
-- **scATAC:** refdata-mm10-2020-A-atac (~1.5 GB) for Cell Ranger ATAC
+- **scATAC:** refdata-cellranger-arc-GRCm39-2024-A (~13 GB) for Cell Ranger ATAC 2.2
 
 Options: `--scrna-only`, `--atac-only`, `-o /path/to/refs`
 
@@ -221,7 +221,7 @@ After `scripts/download_cellranger_data.py` and `scripts/download_cellranger_ref
 ```bash
 python scripts/run_cellranger.py \
   --ref-scrna data/refs/refdata-gex-GRCm39-2024-A \
-  --ref-atac data/refs/refdata-mm10-2020-A-atac
+  --ref-atac data/refs/refdata-cellranger-arc-GRCm39-2024-A
 ```
 
 The script creates 10x-compatible symlinks and runs `cellranger count` (22 scRNA runs) and `cellranger-atac count` (10 scATAC runs). Output goes to `output/cellranger/`. Use `--dry-run` to preview commands.

@@ -12,7 +12,7 @@ Prerequisites:
 
 Run from project root:
   python scripts/run_cellranger.py --ref-scrna /path/to/refdata-gex-mm10-2020-A \\
-                                  --ref-atac /path/to/refdata-mm10-2020-A-atac
+                                  --ref-atac /path/to/refdata-cellranger-arc-GRCm39-2024-A
 """
 
 import argparse
@@ -163,7 +163,7 @@ def main():
         "--ref-atac",
         type=Path,
         required=True,
-        help="Path to scATAC mm10 reference (e.g. refdata-mm10-2020-A-atac)",
+        help="Path to scATAC mouse reference (e.g. refdata-cellranger-arc-GRCm39-2024-A)",
     )
     parser.add_argument(
         "--runs",

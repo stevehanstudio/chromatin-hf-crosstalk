@@ -6,7 +6,7 @@ Run on x86 before scripts/run_cellranger.py. Saves to data/refs/ by default.
 
 References needed for this project:
   - Mouse scRNA (GRCm39 2024-A): for cellranger count
-  - Mouse scATAC (mm10 2020-A):  for cellranger-atac count
+  - Mouse scATAC (GRCm39 2024-A): for cellranger-atac count
 
 Run from project root: python scripts/download_cellranger_refs.py
 """
@@ -22,12 +22,12 @@ REF_SCRNA = {
     "dirname": "refdata-gex-GRCm39-2024-A",
 }
 REF_ATAC = {
-    # 10x ATAC refs often return 403 for direct curl; use --scrna-only and download ATAC manually
-    "url": "https://cf.10xgenomics.com/supp/cell-exp/refdata-mm10-2020-A-atac.tar.gz",
-    "dirname": "refdata-mm10-2020-A-atac",
-    "manual_url": "https://support.10xgenomics.com/single-cell-atac/software/downloads/latest",
+    # Cell Ranger ATAC 2.2 uses cell-arc refs (from https://www.10xgenomics.com/support/software/cell-ranger-atac/downloads)
+    "url": "https://cf.10xgenomics.com/supp/cell-arc/refdata-cellranger-arc-GRCm39-2024-A.tar.gz",
+    "dirname": "refdata-cellranger-arc-GRCm39-2024-A",
+    "manual_url": "https://www.10xgenomics.com/support/software/cell-ranger-atac/downloads",
 }
-REF_SIZES = {"scRNA": "9.7 GB", "scATAC": "~1.5 GB"}
+REF_SIZES = {"scRNA": "9.7 GB", "scATAC": "~13 GB"}
 
 
 def download_with_curl(url: str, out_path: Path) -> bool:
@@ -140,7 +140,7 @@ def main():
             print("\n  scATAC reference returned 403 (10x may require download from their site).")
             print("  Download manually from:")
             print(f"    {REF_ATAC['manual_url']}")
-            print("  Look for 'Mouse reference (mm10)' under References.")
+            print("  Look for 'Mouse reference (GRCm39) - 2024-A' under References.")
             print("  Extract to:", args.output_dir / REF_ATAC["dirname"])
             sys.exit(1)
 
