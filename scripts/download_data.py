@@ -13,6 +13,8 @@ Includes:
   - CUT&RUN: BRD4 in Cx3cr1+ Sham/TAC → Fig 4
   - Sorted fibroblasts bulk RNA-seq (GSE247261)
   - Optional: Kuppe et al. human cardiac scATAC (GSE183852) for Fig 4N
+
+Run from project root: python scripts/download_data.py
 """
 
 import argparse
@@ -80,13 +82,20 @@ EXTERNAL = {
 
 
 def download_with_curl(url: str, out_path: Path, expected_md5: str | None = None) -> bool:
-    """Download file using curl."""
+    """Download file using curl. Uses 2h timeout and resume (-C -) for large files."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = ["curl", "-f", "-L", "-o", str(out_path), url]
+    cmd = [
+        "curl", "-f", "-L", "-C", "-",  # -C - enables resume for partial downloads
+        "--max-time", "7200",             # 2 hours per file
+        "--connect-timeout", "120",       # 2 min to establish connection
+        "-o", str(out_path), url,
+    ]
     try:
         subprocess.run(cmd, check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
         print(f"  Error: {e.stderr.decode() if e.stderr else e}", file=sys.stderr)
+        if out_path.exists():
+            out_path.unlink()  # Remove partial file so re-run will retry
         return False
 
     if expected_md5:

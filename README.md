@@ -5,6 +5,8 @@ Computational replication of Alexanian et al., *Nature* 2024 — dry lab workflo
 **Source:** Alexanian et al., Nature 2024 ([bioRxiv 2023.01.06.522937](https://www.biorxiv.org/content/10.1101/2023.01.06.522937))  
 **Data:** [GEO GSE221699](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE221699) | [BioProject PRJNA915384](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA915384)
 
+*Presentation project for UC Berkeley Extension **MCELLBIX110-122 Immunology** (Dr. Ian Fernandopulle). Not required for the course — created to replicate the study.*
+
 ---
 
 ## Overview
@@ -23,18 +25,34 @@ The study identifies BRD4-dependent chromatin remodeling in cardiac myeloid cell
 
 | Script | Data | Disk space | Platform |
 |--------|------|------------|----------|
-| **download_data.py** | Bulk RNA-seq, ChIP-seq, CUT&RUN, sorted fibroblasts | ~150 GB | Any (ARM64, x86) |
-| **download_cellranger_data.py** | scRNA-seq, snRNA-seq, scATAC-seq (10x) | ~500 GB | x86 only (Cell Ranger) |
+| **scripts/download_data.py** | Bulk RNA-seq, ChIP-seq, CUT&RUN, sorted fibroblasts | ~150 GB | Any (ARM64, x86) |
+| **scripts/download_cellranger_data.py** | scRNA-seq, snRNA-seq, scATAC-seq (10x) | ~500 GB | x86 only (Cell Ranger) |
 
 ```bash
+# Run from project root
+cd chromatin-hf-crosstalk
+
 # Main data (bulk, ChIP, CUT&RUN) — run on any machine
-python download_data.py
+python scripts/download_data.py
 
 # Single-cell data — run on x86 with Cell Ranger
-python download_cellranger_data.py
+python scripts/download_cellranger_data.py
+
+# Then run Cell Ranger (creates symlinks + cellranger count / cellranger-atac count)
+python scripts/run_cellranger.py --ref-scrna /path/to/refdata-gex-mm10-2020-A \
+                                --ref-atac /path/to/refdata-mm10-2020-A-atac
 ```
 
-**Requirements:** Python 3.9+, `curl`. Optional: `sra-tools` for `--use-sra` (faster for large downloads).
+**Requirements:** Python 3.9+, `curl`. Optional: `sra-tools` for `--use-sra` (faster for large downloads). Cell Ranger references: see [INSTALL.md](INSTALL.md#6-cell-ranger-x86-only).
+
+### Setup environment
+
+```bash
+conda env create -f environment.yml
+conda activate chromatin-hf
+```
+
+See [INSTALL.md](INSTALL.md) for full setup. ArchR requires `bioconductor-rhdf5` and `r-cairo` (now in environment.yml) plus a post-install R step for genome annotations.
 
 ---
 
@@ -42,10 +60,23 @@ python download_cellranger_data.py
 
 ```
 chromatin-hf-crosstalk/
-├── README.md                          # This file
-├── STUDY_ANALYSIS_AND_REPLICATION_ROADMAP.md  # Full replication plan
-├── download_data.py                   # Main download (bulk, ChIP, CUT&RUN)
-└── download_cellranger_data.py        # Single-cell download (10x)
+├── README.md
+├── environment.yml
+├── INSTALL.md
+├── STUDY_ANALYSIS_AND_REPLICATION_ROADMAP.md
+├── scripts/
+│   ├── download_data.py
+│   ├── download_cellranger_data.py
+│   ├── run_cellranger.py       # Cell Ranger wrapper (x86)
+│   └── install_r_packages.R
+└── notebooks/                  # Analysis notebooks
+    ├── 01_data_overview.ipynb
+    ├── 02_bulk_rnaseq_de.ipynb
+    ├── 03_chipseq_meox1.ipynb
+    ├── 04_cutrun_brd4.ipynb
+    ├── 05_scrnaseq_seurat.ipynb
+    ├── 06_scatac_archr.ipynb
+    └── 07_integration_summary.ipynb
 ```
 
 ---
@@ -59,6 +90,24 @@ chromatin-hf-crosstalk/
 | GSE221695 | CUT&RUN | 4 | BRD4 in Cx3cr1+ Sham/TAC |
 | GSE221696 | scATAC-seq | 10 | Whole heart + CD45+ nuclei |
 | GSE221698 | scRNA-seq | ~25 | Sham/TAC/JQ1, CD45+, Brd4KO, IgG/anti-IL1B |
+
+---
+
+## Notebooks
+
+Analysis workflows are in `notebooks/`. **Machine split:**
+
+| Notebook | Run on | Content |
+|----------|--------|---------|
+| 01_data_overview | either | Data structure, sample metadata |
+| 02_bulk_rnaseq_de | **ARM64** | edgeR/limma, MEOX1 (Fig 5) |
+| 03_chipseq_meox1 | **ARM64** | ChIP at MEOX1 locus (Fig 5) |
+| 04_cutrun_brd4 | **ARM64** | BRD4 at Il1b peaks (Fig 4) |
+| 05_scrnaseq_seurat | **x86** | Seurat workflow (Figs 1–3, 5) |
+| 06_scatac_archr | **x86** | ArchR workflow (Figs 3, 4) |
+| 07_integration_summary | either | Key takeaways |
+
+ARM64: `scripts/download_data.py` (bulk, ChIP, CUT&RUN). x86: `scripts/download_cellranger_data.py` + Cell Ranger (scRNA, scATAC).
 
 ---
 

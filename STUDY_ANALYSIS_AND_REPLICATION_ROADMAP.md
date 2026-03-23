@@ -97,15 +97,15 @@ The super-series **GSE221699** contains 57 samples across 6 sub-series:
 
 | Script | Data | Disk space | Run on |
 |--------|------|------------|--------|
-| **download_data.py** | Bulk RNA-seq, ChIP-seq, CUT&RUN, sorted fibroblasts | **~150 GB** | Any machine (ARM64, x86) |
-| **download_cellranger_data.py** | scRNA-seq, snRNA-seq, scATAC-seq (10x) | ~500 GB | x86 only (Cell Ranger) |
+| **scripts/download_data.py** | Bulk RNA-seq, ChIP-seq, CUT&RUN, sorted fibroblasts | **~150 GB** | Any machine (ARM64, x86) |
+| **scripts/download_cellranger_data.py** | scRNA-seq, snRNA-seq, scATAC-seq (10x) | ~500 GB | x86 only (Cell Ranger) |
 
 ```bash
 # Main download (bulk, ChIP, CUT&RUN) — run on any machine
-python download_data.py
+python scripts/download_data.py
 
 # Cell Ranger data (scRNA, scATAC) — run on x86 where Cell Ranger is installed
-python download_cellranger_data.py
+python scripts/download_cellranger_data.py
 ```
 
 **Note:** For scRNA/scATAC, you typically need raw FASTQs to reproduce Cell Ranger → Seurat/ArchR workflows. GEO may host count matrices; check each sub-series.

@@ -3,13 +3,15 @@
 Download scRNA-seq and scATAC-seq data for Cell Ranger processing.
 
 Run this on an x86 machine where Cell Ranger is available.
-For bulk RNA-seq, ChIP-seq, CUT&RUN → use download_data.py (main script) instead.
+For bulk RNA-seq, ChIP-seq, CUT&RUN → use scripts/download_data.py instead.
 Data: Alexanian et al. Nature 2024 | GEO GSE221699 | BioProject PRJNA915384
 
 Includes:
   - scRNA-seq (10x): Sham/TAC/JQ1, CD45+, TAC WT/Brd4KO, TAC IgG/anti-IL1B
   - snRNA-seq (10x): Whole heart TAC WT/Brd4KO
   - scATAC-seq (10x): Whole heart + CD45+ nuclei
+
+Run from project root: python scripts/download_cellranger_data.py
 """
 
 import argparse

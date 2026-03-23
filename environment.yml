@@ -1,0 +1,48 @@
+# Conda environment for chromatin-HF showcase
+# Create: conda env create -f environment.yml
+# Activate: conda activate chromatin-hf
+
+name: chromatin-hf
+
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  # Python
+  - python=3.11
+  - jupyterlab
+  - jupyter
+  - pandas
+  - numpy
+  - matplotlib
+  - seaborn
+
+  # R
+  - r-base>=4.0
+  - r-irkernel
+
+  # R packages (CRAN via conda-forge)
+  - r-seurat
+  - r-harmony
+  - r-ggplot2
+  - r-dplyr
+  - r-tidyr
+  - r-tibble
+  - r-devtools
+  - r-biocmanager
+
+  # R packages (Bioconductor via bioconda)
+  - bioconductor-edger
+  - bioconductor-limma
+  - bioconductor-rsubread
+  - bioconductor-genomicranges
+  - bioconductor-rtracklayer
+  - bioconductor-rhdf5        # ArchR dependency
+  - r-cairo                   # ArchR plotting (avoids build failures)
+
+  # Pip packages (for any not in conda)
+  - pip
+  - pip:
+    - scanpy  # optional, Python single-cell
