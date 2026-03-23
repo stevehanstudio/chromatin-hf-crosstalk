@@ -75,7 +75,7 @@ def download_ref(name: str, ref: dict, out_dir: Path, extract: bool = True) -> P
         return ref_dir
 
     if not tar_path.exists():
-        print(f"  Downloading {name} (~{REF_SIZES.get(name, '?')})...")
+        print(f"  Downloading {name} ({REF_SIZES.get(name, '?')})...")
         if not download_with_curl(ref["url"], tar_path):
             return None
     else:
