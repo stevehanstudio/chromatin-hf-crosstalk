@@ -201,7 +201,7 @@ def main():
             print(f"Unknown run: {r}", file=sys.stderr)
             sys.exit(1)
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     scrna_runs = [r for r in runs if "scATAC" not in CELLRANGER_RUNS[r][0]]
     atac_runs = [r for r in runs if "scATAC" in CELLRANGER_RUNS[r][0]]
@@ -213,19 +213,25 @@ def main():
         print(f"Error: scATAC reference not found: {args.ref_atac}", file=sys.stderr)
         sys.exit(1)
 
+    # Resolve to absolute paths so they work when subprocess cwd=output_dir
+    ref_scrna = args.ref_scrna.resolve()
+    ref_atac = args.ref_atac.resolve()
+    fastq_dir = args.fastq_dir.resolve()
+    output_dir = args.output_dir.resolve()
+
     failed = []
 
     if scrna_runs:
         print(f"\n--- scRNA/snRNA-seq ({len(scrna_runs)} runs) ---")
         for i, run_id in enumerate(scrna_runs, 1):
             label = CELLRANGER_RUNS[run_id][0]
-            run_dir = args.fastq_dir / run_id
+            run_dir = fastq_dir / run_id
             print(f"[{i}/{len(scrna_runs)}] {run_id} ({label})")
             if not create_symlinks(run_dir, run_id):
                 print(f"  Skip: no FASTQs in {run_dir}")
                 continue
             ok = run_cellranger_count(
-                run_id, run_dir, args.output_dir, args.ref_scrna,
+                run_id, run_dir, output_dir, ref_scrna,
                 include_introns=not args.no_include_introns,
                 localcores=args.localcores, localmem=args.localmem, dry_run=args.dry_run,
             )
@@ -236,13 +242,13 @@ def main():
         print(f"\n--- scATAC-seq ({len(atac_runs)} runs) ---")
         for i, run_id in enumerate(atac_runs, 1):
             label = CELLRANGER_RUNS[run_id][0]
-            run_dir = args.fastq_dir / run_id
+            run_dir = fastq_dir / run_id
             print(f"[{i}/{len(atac_runs)}] {run_id} ({label})")
             if not create_symlinks(run_dir, run_id):
                 print(f"  Skip: no FASTQs in {run_dir}")
                 continue
             ok = run_cellranger_atac_count(
-                run_id, run_dir, args.output_dir, args.ref_atac,
+                run_id, run_dir, output_dir, ref_atac,
                 localcores=args.localcores, localmem=args.localmem, dry_run=args.dry_run,
             )
             if not ok:
