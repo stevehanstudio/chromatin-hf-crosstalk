@@ -55,6 +55,8 @@ conda activate chromatin-hf
 
 See [INSTALL.md](INSTALL.md) for full setup. ArchR requires `bioconductor-rhdf5` and `r-cairo` (now in environment.yml) plus a post-install R step for genome annotations.
 
+**One environment for all machines.** Use the same `environment.yml` on ARM64 and x86. The only reason for multiple machines is that **Cell Ranger is x86-only** — if your main machine is ARM64 (e.g. Apple Silicon), you need an x86 machine for scRNA/scATAC processing. If you have a single x86 machine, you can run the full workflow there with this same environment.
+
 ---
 
 ## Project Structure

@@ -24,6 +24,12 @@ from pathlib import Path
 # ENA run metadata for Cell Ranger data (scRNA-seq, snRNA-seq, scATAC-seq)
 # Excludes: Bulk RNA-seq, ChIP-seq, CUT&RUN, Sorted FBs (bulk)
 # Source: https://www.ebi.ac.uk/ena/portal/api/filereport?accession=PRJNA915384&result=read_run
+# scATAC run IDs - require SRA with --split-files (ENA only has 2 FASTQs; 10x needs R1,R2,I2)
+SCATAC_RUNS = {
+    "SRR22882159", "SRR22882160", "SRR22882161", "SRR22882162", "SRR22882163",
+    "SRR22882164", "SRR22882165", "SRR22882166", "SRR22882167",
+}
+
 CELLRANGER_RUNS = {
     # scATAC-seq (10 runs)
     "SRR22882159": ("scATAC-Seq TAC_WT_rep1", "paired"),
@@ -142,8 +148,10 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
     return ok
 
 
-def download_with_fasterq_dump(run_id: str, out_dir: Path) -> bool:
-    """Use SRA fasterq-dump (requires sra-tools)."""
+def download_with_fasterq_dump(run_id: str, out_dir: Path, scatac: bool = False) -> bool:
+    """Use SRA fasterq-dump (requires sra-tools).
+    For scATAC: use --split-files --include-technical to get R1,R2,I2 (ENA has only 2 files).
+    """
     run_dir = out_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
@@ -153,6 +161,8 @@ def download_with_fasterq_dump(run_id: str, out_dir: Path) -> bool:
         "-f",
         "-e", str(os.cpu_count() or 4),
     ]
+    if scatac:
+        cmd.extend(["--split-files", "--include-technical"])
     try:
         subprocess.run(cmd, check=True)
         return True
@@ -174,7 +184,7 @@ def main():
     parser.add_argument(
         "--use-sra",
         action="store_true",
-        help="Use fasterq-dump instead of ENA direct download (requires sra-tools)",
+        help="Use fasterq-dump instead of ENA (required for scATAC: ENA has only 2 FASTQs)",
     )
     parser.add_argument(
         "--runs",
@@ -202,9 +212,12 @@ def main():
     failed = []
     for i, run_id in enumerate(runs, 1):
         label = CELLRANGER_RUNS[run_id][0]
+        is_scatac = run_id in SCATAC_RUNS
         print(f"[{i}/{len(runs)}] {run_id} ({label})")
-        if args.use_sra:
-            ok = download_with_fasterq_dump(run_id, args.output_dir)
+        if args.use_sra or is_scatac:
+            if is_scatac and not args.use_sra:
+                print("  (scATAC requires SRA; ENA has only 2 FASTQs, cellranger-atac needs I2)")
+            ok = download_with_fasterq_dump(run_id, args.output_dir, scatac=is_scatac)
         else:
             ok = download_run_ena(run_id, args.output_dir, md5_checks=args.md5)
         if not ok:

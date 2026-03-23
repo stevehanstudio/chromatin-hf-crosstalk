@@ -26,7 +26,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 try:
-    from download_cellranger_data import CELLRANGER_RUNS
+    from download_cellranger_data import CELLRANGER_RUNS, SCATAC_RUNS
 except ImportError:
     sys.exit("Could not import download_cellranger_data. Run from project root: python scripts/run_cellranger.py")
 
@@ -45,6 +45,34 @@ def create_symlinks(run_dir: Path, run_id: str) -> bool:
     ln1 = run_dir / f"{run_id}_S1_L001_R1_001.fastq.gz"
     ln2 = run_dir / f"{run_id}_S1_L001_R2_001.fastq.gz"
     for src, dst in [(fq1, ln1), (fq2, ln2)]:
+        if not dst.exists():
+            dst.symlink_to(src.name)
+    return True
+
+
+def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
+    """
+    Create 10x-style symlinks for scATAC FASTQs from SRA (--split-files --include-technical).
+    SRA: SRRxxxxx_1.fastq, SRRxxxxx_2.fastq, SRRxxxxx_3.fastq
+    10x Chromium: R1, I2 (16bp barcode), R2. Accepts .fastq or .fastq.gz.
+    """
+    ext = None
+    for e in (".fastq.gz", ".fastq"):
+        if (run_dir / f"{run_id}_1{e}").exists():
+            ext = e
+            break
+    if not ext:
+        return False
+    fq1 = run_dir / f"{run_id}_1{ext}"
+    fq2 = run_dir / f"{run_id}_2{ext}"
+    fq3 = run_dir / f"{run_id}_3{ext}"
+    if not fq1.exists() or not fq2.exists() or not fq3.exists():
+        return False
+    # 10x Chromium scATAC: R1, I2 (barcode), R2
+    ln1 = run_dir / f"{run_id}_S1_L001_R1_001{ext}"
+    ln2 = run_dir / f"{run_id}_S1_L001_I2_001{ext}"
+    ln3 = run_dir / f"{run_id}_S1_L001_R2_001{ext}"
+    for src, dst in [(fq1, ln1), (fq2, ln2), (fq3, ln3)]:
         if not dst.exists():
             dst.symlink_to(src.name)
     return True
@@ -243,8 +271,8 @@ def main():
             label = CELLRANGER_RUNS[run_id][0]
             run_dir = fastq_dir / run_id
             print(f"[{i}/{len(atac_runs)}] {run_id} ({label})")
-            if not create_symlinks(run_dir, run_id):
-                print(f"  Skip: no FASTQs in {run_dir}")
+            if not create_symlinks_atac(run_dir, run_id):
+                print(f"  Skip: no FASTQs in {run_dir} (scATAC needs 3 files from SRA --split-files)")
                 continue
             ok = run_cellranger_atac_count(
                 run_id, run_dir, output_dir, ref_atac,

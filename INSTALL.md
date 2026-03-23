@@ -6,6 +6,8 @@ Tools and libraries for the chromatin-HF showcase notebooks. R runs in Jupyter v
 
 ## 0. Conda environment (recommended)
 
+**One environment for all machines.** Use the same `environment.yml` on ARM64 and x86. Cell Ranger (scRNA/scATAC) is x86-only, so if your main machine is ARM64 (e.g. Apple Silicon), you’ll use an x86 machine only for Cell Ranger steps. If you have a single x86 machine, run the full workflow there with this same environment.
+
 ```bash
 cd chromatin-hf-crosstalk
 conda env create -f environment.yml
@@ -198,7 +200,7 @@ IRkernel::installspec()
 
 ## 6. Cell Ranger (x86 only)
 
-Needed for scRNA-seq and scATAC-seq pipelines. Install from [10x Genomics support](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
+Needed for scRNA-seq and scATAC-seq pipelines. **Cell Ranger is x86-only** — that’s why some workflows require an x86 machine. Use the same `chromatin-hf` conda env there. Install from [10x Genomics support](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
 
 ### 6.1 Reference genomes (mouse)
 
@@ -214,7 +216,18 @@ This fetches:
 
 Options: `--scrna-only`, `--atac-only`, `-o /path/to/refs`
 
-### 6.2 Run Cell Ranger wrapper
+### 6.2 Download FASTQs
+
+```bash
+python scripts/download_cellranger_data.py
+```
+
+- **scRNA/snRNA:** Uses ENA by default (2 FASTQs per run).
+- **scATAC:** ENA provides only 2 FASTQs; 10x needs R1, I2 (barcode), R2. The script auto-uses SRA (`fasterq-dump --split-files --include-technical`) for scATAC runs. Install `sra-tools` (`conda install -c bioconda sra-tools`).
+
+If you previously downloaded scATAC via ENA, remove those run dirs and re-run to get the 3-file layout.
+
+### 6.3 Run Cell Ranger wrapper
 
 After `scripts/download_cellranger_data.py` and `scripts/download_cellranger_refs.py`:
 
@@ -226,7 +239,7 @@ python scripts/run_cellranger.py \
 
 The script creates 10x-compatible symlinks and runs `cellranger count` (22 scRNA runs) and `cellranger-atac count` (10 scATAC runs). Output goes to `output/cellranger/`. Use `--dry-run` to preview commands.
 
-### 6.3 Other optional tools
+### 6.4 Other optional tools
 
 | Tool | Purpose | Install |
 |------|---------|---------|
