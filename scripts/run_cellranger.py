@@ -201,11 +201,6 @@ def main():
             print(f"Unknown run: {r}", file=sys.stderr)
             sys.exit(1)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    scrna_runs = [r for r in runs if "scATAC" not in CELLRANGER_RUNS[r][0]]
-    atac_runs = [r for r in runs if "scATAC" in CELLRANGER_RUNS[r][0]]
-
     if not args.ref_scrna.exists():
         print(f"Error: scRNA reference not found: {args.ref_scrna}", file=sys.stderr)
         sys.exit(1)
@@ -218,6 +213,10 @@ def main():
     ref_atac = args.ref_atac.resolve()
     fastq_dir = args.fastq_dir.resolve()
     output_dir = args.output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    scrna_runs = [r for r in runs if "scATAC" not in CELLRANGER_RUNS[r][0]]
+    atac_runs = [r for r in runs if "scATAC" in CELLRANGER_RUNS[r][0]]
 
     failed = []
 
