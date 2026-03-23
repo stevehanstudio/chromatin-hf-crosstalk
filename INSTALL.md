@@ -200,30 +200,28 @@ IRkernel::installspec()
 
 Needed for scRNA-seq and scATAC-seq pipelines. Install from [10x Genomics support](https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest).
 
-### 6.1 Reference genomes (mm10)
+### 6.1 Reference genomes (mouse)
 
-Download mouse mm10 references for your Cell Ranger version:
-
-- **scRNA:** [refdata-gex-mm10-2020-A](https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-mm10-2020-A.tar.gz) (~1.5 GB)
-- **scATAC:** [refdata-mm10-2020-A-atac](https://cf.10xgenomics.com/supp/cell-exp/refdata-mm10-2020-A-atac.tar.gz)
+Download mouse references (scRNA + scATAC) to `data/refs/`:
 
 ```bash
-# Example (adjust paths)
-wget https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-mm10-2020-A.tar.gz
-tar -xzf refdata-gex-mm10-2020-A.tar.gz
-
-wget https://cf.10xgenomics.com/supp/cell-exp/refdata-mm10-2020-A-atac.tar.gz
-tar -xzf refdata-mm10-2020-A-atac.tar.gz
+python scripts/download_cellranger_refs.py
 ```
+
+This fetches:
+- **scRNA:** refdata-gex-GRCm39-2024-A (~9.7 GB) for Cell Ranger 10
+- **scATAC:** refdata-mm10-2020-A-atac (~1.5 GB) for Cell Ranger ATAC
+
+Options: `--scrna-only`, `--atac-only`, `-o /path/to/refs`
 
 ### 6.2 Run Cell Ranger wrapper
 
-After `scripts/download_cellranger_data.py` has finished:
+After `scripts/download_cellranger_data.py` and `scripts/download_cellranger_refs.py`:
 
 ```bash
 python scripts/run_cellranger.py \
-  --ref-scrna /path/to/refdata-gex-mm10-2020-A \
-  --ref-atac /path/to/refdata-mm10-2020-A-atac
+  --ref-scrna data/refs/refdata-gex-GRCm39-2024-A \
+  --ref-atac data/refs/refdata-mm10-2020-A-atac
 ```
 
 The script creates 10x-compatible symlinks and runs `cellranger count` (22 scRNA runs) and `cellranger-atac count` (10 scATAC runs). Output goes to `output/cellranger/`. Use `--dry-run` to preview commands.

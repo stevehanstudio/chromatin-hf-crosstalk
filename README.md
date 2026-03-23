@@ -37,10 +37,11 @@ python scripts/download_data.py
 
 # Single-cell data — run on x86 with Cell Ranger
 python scripts/download_cellranger_data.py
+python scripts/download_cellranger_refs.py   # refs → data/refs/
 
 # Then run Cell Ranger (creates symlinks + cellranger count / cellranger-atac count)
-python scripts/run_cellranger.py --ref-scrna /path/to/refdata-gex-mm10-2020-A \
-                                --ref-atac /path/to/refdata-mm10-2020-A-atac
+python scripts/run_cellranger.py --ref-scrna data/refs/refdata-gex-GRCm39-2024-A \
+                                --ref-atac data/refs/refdata-mm10-2020-A-atac
 ```
 
 **Requirements:** Python 3.9+, `curl`. Optional: `sra-tools` for `--use-sra` (faster for large downloads). Cell Ranger references: see [INSTALL.md](INSTALL.md#6-cell-ranger-x86-only).
@@ -67,7 +68,8 @@ chromatin-hf-crosstalk/
 ├── scripts/
 │   ├── download_data.py
 │   ├── download_cellranger_data.py
-│   ├── run_cellranger.py       # Cell Ranger wrapper (x86)
+│   ├── download_cellranger_refs.py   # Cell Ranger refs → data/refs/
+│   ├── run_cellranger.py             # Cell Ranger wrapper (x86)
 │   └── install_r_packages.R
 └── notebooks/                  # Analysis notebooks
     ├── 01_data_overview.ipynb
