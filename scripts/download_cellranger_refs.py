@@ -22,8 +22,10 @@ REF_SCRNA = {
     "dirname": "refdata-gex-GRCm39-2024-A",
 }
 REF_ATAC = {
+    # 10x ATAC refs often return 403 for direct curl; use --scrna-only and download ATAC manually
     "url": "https://cf.10xgenomics.com/supp/cell-exp/refdata-mm10-2020-A-atac.tar.gz",
     "dirname": "refdata-mm10-2020-A-atac",
+    "manual_url": "https://support.10xgenomics.com/single-cell-atac/software/downloads/latest",
 }
 REF_SIZES = {"scRNA": "9.7 GB", "scATAC": "~1.5 GB"}
 
@@ -33,6 +35,7 @@ def download_with_curl(url: str, out_path: Path) -> bool:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "curl", "-f", "-L", "-C", "-",
+        "-H", "User-Agent: Mozilla/5.0 (compatible; Chromatin-HF/1.0)",
         "--max-time", "7200",
         "--connect-timeout", "120",
         "-o", str(out_path), url,
@@ -134,7 +137,11 @@ def main():
         if p:
             paths["atac"] = p
         else:
-            print("  Failed to get scATAC reference", file=sys.stderr)
+            print("\n  scATAC reference returned 403 (10x may require download from their site).")
+            print("  Download manually from:")
+            print(f"    {REF_ATAC['manual_url']}")
+            print("  Look for 'Mouse reference (mm10)' under References.")
+            print("  Extract to:", args.output_dir / REF_ATAC["dirname"])
             sys.exit(1)
 
     print("\nDone. Run Cell Ranger with:")
