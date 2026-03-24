@@ -27,7 +27,7 @@ The study identifies BRD4-dependent chromatin remodeling in cardiac myeloid cell
 | Script                                         | Data                                                | Disk space | Platform               |
 | ---------------------------------------------- | --------------------------------------------------- | ---------- | ---------------------- |
 | **scripts/python/download_data.py**            | Bulk RNA-seq, ChIP-seq, CUT&RUN, sorted fibroblasts | ~150 GB    | Any (ARM64, x86)       |
-| **scripts/python/download_cellranger_data.py** | scRNA-seq, snRNA-seq, scATAC-seq (10x)              | ~500 GB    | x86 only (Cell Ranger) |
+| **scripts/python/download_cellranger_data.py** | scRNA-seq, snRNA-seq, scATAC-seq (10x)              | ~150 GB (--minimal) or ~500 GB | x86 only (Cell Ranger) |
 
 
 ```bash
@@ -38,7 +38,8 @@ cd chromatin-hf-crosstalk
 python scripts/python/download_data.py
 
 # Single-cell data — run on x86 with Cell Ranger
-python scripts/python/download_cellranger_data.py
+python scripts/python/download_cellranger_data.py --minimal   # ~150 GB for Figs 1-5
+# python scripts/python/download_cellranger_data.py           # full 31 runs (~500 GB)
 python scripts/python/download_cellranger_refs.py   # refs → data/refs/
 
 # Then run Cell Ranger (creates symlinks + cellranger count / cellranger-atac count)

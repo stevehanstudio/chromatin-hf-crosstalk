@@ -11,7 +11,9 @@ Includes:
   - snRNA-seq (10x): Whole heart TAC WT/Brd4KO
   - scATAC-seq (10x): Whole heart + CD45+ nuclei
 
-Run from project root: python scripts/python/download_cellranger_data.py
+Run from project root:
+  python scripts/python/download_cellranger_data.py --minimal   # ~150 GB, 15 runs
+  python scripts/python/download_cellranger_data.py             # full 31 runs (~500 GB)
 """
 
 import argparse
