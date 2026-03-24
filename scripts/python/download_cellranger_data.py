@@ -172,9 +172,19 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
 def download_with_fasterq_dump(run_id: str, out_dir: Path, scatac: bool = False) -> bool:
     """Use SRA fasterq-dump (requires sra-tools).
     For scATAC: use --split-files --include-technical to get R1,R2,I2 (ENA has only 2 files).
+    Skips if expected output files already exist (resume-friendly).
     """
     run_dir = out_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    # Skip if already downloaded (fasterq-dump produces .fastq, not .gz)
+    min_size = 10_000  # bytes; avoid skipping tiny partials
+    if scatac:
+        expected = [run_dir / f"{run_id}_{i}.fastq" for i in (1, 2, 3)]
+    else:
+        expected = [run_dir / f"{run_id}_{i}.fastq" for i in (1, 2)]
+    if all(p.exists() and p.stat().st_size >= min_size for p in expected):
+        print(f"  Skip (exists): {', '.join(p.name for p in expected)}")
+        return True
     cmd = [
         "fasterq-dump",
         run_id,
