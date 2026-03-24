@@ -31,6 +31,18 @@ SCATAC_RUNS = {
     "SRR22882164", "SRR22882165", "SRR22882166", "SRR22882167",
 }
 
+# Minimal subset (~150 GB): one rep per condition for Figs 1-5
+# scATAC: whole heart TAC/Brd4KO, CD45+ Sham/TAC/Brd4KO
+# scRNA: Sham/TAC/JQ1, CD45+, snRNA TAC/Brd4KO, IgG/anti-IL1B
+MINIMAL_RUNS = [
+    "SRR22882159", "SRR22882161",  # scATAC whole heart TAC_WT, TAC_BRD4KO
+    "SRR22882163", "SRR22882164", "SRR22882166",  # scATAC CD45+ Sham, TAC_WT, TAC_BRD4KO
+    "SRR22882168", "SRR22882171", "SRR22882174",  # scRNA Sham, TAC, TAC_JQ1
+    "SRR22882177", "SRR22882178", "SRR22882180",  # scRNA CD45+ Sham, TAC, Brd4KO
+    "SRR22882182", "SRR22882184",  # snRNA TAC_WT, TAC_BRD4KO
+    "SRR22882186", "SRR22882188",  # scRNA TAC IgG, anti-IL1B
+]
+
 CELLRANGER_RUNS = {
     # scATAC-seq (10 runs)
     "SRR22882159": ("scATAC-Seq TAC_WT_rep1", "paired"),
@@ -218,10 +230,15 @@ def main():
         help="Use fasterq-dump instead of ENA (required for scATAC: ENA has only 2 FASTQs)",
     )
     parser.add_argument(
+        "--minimal",
+        action="store_true",
+        help="Download minimal subset (~150 GB) for Figs 1-5 (15 runs instead of 31)",
+    )
+    parser.add_argument(
         "--runs",
         nargs="+",
         default=None,
-        help="Specific run IDs to download (default: all Cell Ranger runs)",
+        help="Specific run IDs (overrides --minimal). Default: all 31 runs (~500 GB)",
     )
     parser.add_argument(
         "--md5",
@@ -230,15 +247,22 @@ def main():
     )
     args = parser.parse_args()
 
-    runs = args.runs or list(CELLRANGER_RUNS)
+    if args.runs:
+        runs = args.runs
+    elif args.minimal:
+        runs = MINIMAL_RUNS
+        print("Using --minimal: 15 runs (~150 GB) for Figs 1-5\n")
+    else:
+        runs = list(CELLRANGER_RUNS)
     for r in runs:
         if r not in CELLRANGER_RUNS:
             print(f"Unknown run: {r}", file=sys.stderr)
             sys.exit(1)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    est_gb = "~150" if (args.minimal and not args.runs) else f"~{max(50, len(runs) * 16)}"
     print(f"Downloading {len(runs)} runs to {args.output_dir}")
-    print("Total ~500 GB. Ensure sufficient disk space.\n")
+    print(f"Estimated disk: {est_gb} GB. Ensure sufficient space.\n")
 
     failed = []
     for i, run_id in enumerate(runs, 1):
