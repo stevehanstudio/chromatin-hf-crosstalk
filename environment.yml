@@ -33,6 +33,9 @@ dependencies:
   - r-devtools
   - r-biocmanager
 
+  # SRA tools (for scATAC downloads; ENA has only 2 FASTQs, need fasterq-dump)
+  - sra-tools
+
   # R packages (Bioconductor via bioconda)
   - bioconductor-edger
   - bioconductor-limma

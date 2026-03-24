@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # Install R packages for chromatin-HF showcase notebooks
-# Run from project root: Rscript scripts/install_r_packages.R
+# Run from project root: Rscript scripts/R/install_r_packages.R
 
 message("Installing CRAN packages...")
 install.packages(

@@ -177,7 +177,7 @@ BiocManager::install("csaw")  # ChIP-seq differential binding
 
 ## 5. One-shot R install script
 
-Run from project root: `Rscript scripts/install_r_packages.R`
+Run from project root: `Rscript scripts/R/install_r_packages.R`
 
 ```r
 # CRAN
@@ -207,7 +207,7 @@ Needed for scRNA-seq and scATAC-seq pipelines. **Cell Ranger is x86-only** — t
 Download mouse references (scRNA + scATAC) to `data/refs/`:
 
 ```bash
-python scripts/download_cellranger_refs.py
+python scripts/python/download_cellranger_refs.py
 ```
 
 This fetches:
@@ -219,7 +219,7 @@ Options: `--scrna-only`, `--atac-only`, `-o /path/to/refs`
 ### 6.2 Download FASTQs
 
 ```bash
-python scripts/download_cellranger_data.py
+python scripts/python/download_cellranger_data.py
 ```
 
 - **scRNA/snRNA:** Uses ENA by default (2 FASTQs per run).
@@ -229,10 +229,10 @@ If you previously downloaded scATAC via ENA, remove those run dirs and re-run to
 
 ### 6.3 Run Cell Ranger wrapper
 
-After `scripts/download_cellranger_data.py` and `scripts/download_cellranger_refs.py`:
+After `scripts/python/download_cellranger_data.py` and `scripts/python/download_cellranger_refs.py`:
 
 ```bash
-python scripts/run_cellranger.py \
+python scripts/python/run_cellranger.py \
   --ref-scrna data/refs/refdata-gex-GRCm39-2024-A \
   --ref-atac data/refs/refdata-cellranger-arc-GRCm39-2024-A
 ```

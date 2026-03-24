@@ -6,12 +6,12 @@ Run on x86 where Cell Ranger is installed. Creates 10x-compatible symlinks
 (ENA naming → Illumina-style) and runs cellranger count / cellranger-atac count.
 
 Prerequisites:
-  - scripts/download_cellranger_data.py has been run
+  - scripts/python/download_cellranger_data.py has been run
   - Cell Ranger and Cell Ranger ATAC installed
   - mm10 reference genomes downloaded (see INSTALL.md or 10x Genomics support)
 
 Run from project root:
-  python scripts/run_cellranger.py --ref-scrna /path/to/refdata-gex-mm10-2020-A \\
+  python scripts/python/run_cellranger.py --ref-scrna /path/to/refdata-gex-mm10-2020-A \\
                                   --ref-atac /path/to/refdata-cellranger-arc-GRCm39-2024-A
 """
 
@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Ensure scripts/ is on path for import (when run as python scripts/run_cellranger.py)
+# Ensure scripts/python/ is on path for import
 _scripts_dir = Path(__file__).resolve().parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
@@ -28,7 +28,7 @@ if str(_scripts_dir) not in sys.path:
 try:
     from download_cellranger_data import CELLRANGER_RUNS, SCATAC_RUNS
 except ImportError:
-    sys.exit("Could not import download_cellranger_data. Run from project root: python scripts/run_cellranger.py")
+    sys.exit("Could not import download_cellranger_data. Run from project root: python scripts/python/run_cellranger.py")
 
 
 def create_symlinks(run_dir: Path, run_id: str) -> bool:

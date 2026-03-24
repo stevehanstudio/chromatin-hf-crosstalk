@@ -2,13 +2,13 @@
 """
 Download Cell Ranger reference genomes for mouse (mm10/GRCm39).
 
-Run on x86 before scripts/run_cellranger.py. Saves to data/refs/ by default.
+Run on x86 before scripts/python/run_cellranger.py. Saves to data/refs/ by default.
 
 References needed for this project:
   - Mouse scRNA (GRCm39 2024-A): for cellranger count
   - Mouse scATAC (GRCm39 2024-A): for cellranger-atac count
 
-Run from project root: python scripts/download_cellranger_refs.py
+Run from project root: python scripts/python/download_cellranger_refs.py
 """
 
 import argparse
@@ -150,7 +150,7 @@ def main():
     if "atac" in paths:
         print(f"  --ref-atac {paths['atac']}")
     print("\nExample:")
-    print(f"  python scripts/run_cellranger.py \\")
+    print(f"  python scripts/python/run_cellranger.py \\")
     print(f"    --ref-scrna {paths.get('scrna', '...')} \\")
     print(f"    --ref-atac {paths.get('atac', '...')}")
 

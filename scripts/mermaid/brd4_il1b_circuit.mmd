@@ -1,0 +1,31 @@
+%% BRD4 → IL1B → NF-κB → MEOX1 Circuit (Alexanian et al., Nature 2024)
+%% Immune–fibroblast crosstalk pathway
+
+flowchart TD
+    subgraph Trigger
+        A[Cardiac Stress]
+    end
+
+    subgraph Macrophage["Cx3cr1⁺ Macrophage"]
+        B[BRD4 binds stress‑responsive super‑enhancer]
+        C[BRD4 → activates Il1b via large enhancer cluster]
+    end
+
+    subgraph Secretion
+        D[IL‑1β secretion]
+    end
+
+    subgraph Fibroblast["Cardiac Fibroblast"]
+        E[IL‑1β receptor]
+        F[NF‑κB p65/RELA enters nucleus]
+        G[NF‑κB binds MEOX1 enhancer]
+        H[MEOX1 ↑ transcription]
+    end
+
+    subgraph Outcome
+        I[Fibroblast activation]
+        J[Collagen, POSTN, ECM]
+        K[Fibrosis & HF progression]
+    end
+
+    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K

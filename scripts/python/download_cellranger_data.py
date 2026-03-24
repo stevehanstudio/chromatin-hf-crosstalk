@@ -3,7 +3,7 @@
 Download scRNA-seq and scATAC-seq data for Cell Ranger processing.
 
 Run this on an x86 machine where Cell Ranger is available.
-For bulk RNA-seq, ChIP-seq, CUT&RUN → use scripts/download_data.py instead.
+For bulk RNA-seq, ChIP-seq, CUT&RUN → use scripts/python/download_data.py instead.
 Data: Alexanian et al. Nature 2024 | GEO GSE221699 | BioProject PRJNA915384
 
 Includes:
@@ -11,7 +11,7 @@ Includes:
   - snRNA-seq (10x): Whole heart TAC WT/Brd4KO
   - scATAC-seq (10x): Whole heart + CD45+ nuclei
 
-Run from project root: python scripts/download_cellranger_data.py
+Run from project root: python scripts/python/download_cellranger_data.py
 """
 
 import argparse
@@ -19,6 +19,7 @@ import hashlib
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # ENA run metadata for Cell Ranger data (scRNA-seq, snRNA-seq, scATAC-seq)
@@ -66,22 +67,42 @@ CELLRANGER_RUNS = {
     "SRR22882189": ("scRNA-Seq TAC_antiIL1B_Ab2", "paired"),
 }
 
-def download_with_curl(url: str, out_path: Path, expected_md5: str | None = None) -> bool:
-    """Download file using curl. Uses 2h timeout and resume (-C -) for large files."""
+def download_with_curl(
+    url: str,
+    out_path: Path,
+    expected_md5: str | None = None,
+    *,
+    max_time: int = 21600,
+    retries: int = 3,
+) -> bool:
+    """Download file using curl. Uses 6h timeout, resume (-C -), and retries for large files."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "curl", "-f", "-L", "-C", "-",  # -C - enables resume for partial downloads
-        "--max-time", "7200",             # 2 hours per file
-        "--connect-timeout", "120",       # 2 min to establish connection
+        "curl", "-f", "-L", "-C", "-",
+        "--max-time", str(max_time),
+        "--connect-timeout", "120",
+        "--retry", "2", "--retry-delay", "30",
         "-o", str(out_path), url,
     ]
-    try:
-        subprocess.run(cmd, check=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        print(f"  Error: {e.stderr.decode() if e.stderr else e}", file=sys.stderr)
-        if out_path.exists():
-            out_path.unlink()  # Remove partial file so re-run will retry
-        return False
+    for attempt in range(1, retries + 1):
+        try:
+            result = subprocess.run(cmd, capture_output=True)
+            if result.returncode == 0:
+                break
+            raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+        except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or b"").decode(errors="replace")
+            print(f"  Error (attempt {attempt}/{retries}): {stderr.strip() or str(e)}", file=sys.stderr)
+            if e.returncode in (18, 28) and out_path.exists() and out_path.stat().st_size > 1000:
+                print(f"  Keeping partial for resume", file=sys.stderr)
+            elif out_path.exists():
+                out_path.unlink()
+            if attempt < retries:
+                wait = 60 * attempt
+                print(f"  Retrying in {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+            else:
+                return False
 
     if expected_md5:
         with open(out_path, "rb") as f:

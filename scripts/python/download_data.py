@@ -14,7 +14,7 @@ Includes:
   - Sorted fibroblasts bulk RNA-seq (GSE247261)
   - Optional: Kuppe et al. human cardiac scATAC (GSE183852) for Fig 4N
 
-Run from project root: python scripts/download_data.py
+Run from project root: python scripts/python/download_data.py
 """
 
 import argparse
@@ -22,6 +22,7 @@ import hashlib
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # ENA run metadata for non-Cell-Ranger data (Bulk RNA-seq, ChIP-seq, CUT&RUN, Sorted FBs)
@@ -81,22 +82,44 @@ EXTERNAL = {
 }
 
 
-def download_with_curl(url: str, out_path: Path, expected_md5: str | None = None) -> bool:
-    """Download file using curl. Uses 2h timeout and resume (-C -) for large files."""
+def download_with_curl(
+    url: str,
+    out_path: Path,
+    expected_md5: str | None = None,
+    *,
+    max_time: int = 21600,
+    retries: int = 3,
+) -> bool:
+    """Download file using curl. Uses 6h timeout, resume (-C -), and retries for large files."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "curl", "-f", "-L", "-C", "-",  # -C - enables resume for partial downloads
-        "--max-time", "7200",             # 2 hours per file
+        "--max-time", str(max_time),      # 6 hours per file (large FASTQs)
         "--connect-timeout", "120",       # 2 min to establish connection
+        "--retry", "2",                   # curl built-in retry on transient failure
+        "--retry-delay", "30",            # 30s between curl retries
         "-o", str(out_path), url,
     ]
-    try:
-        subprocess.run(cmd, check=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        print(f"  Error: {e.stderr.decode() if e.stderr else e}", file=sys.stderr)
-        if out_path.exists():
-            out_path.unlink()  # Remove partial file so re-run will retry
-        return False
+    for attempt in range(1, retries + 1):
+        try:
+            result = subprocess.run(cmd, capture_output=True)
+            if result.returncode == 0:
+                break
+            raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+        except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or b"").decode(errors="replace")
+            print(f"  Error (attempt {attempt}/{retries}): {stderr.strip() or str(e)}", file=sys.stderr)
+            # Keep partial for resume-able errors: 18=transfer closed, 28=timeout
+            if e.returncode in (18, 28) and out_path.exists() and out_path.stat().st_size > 1000:
+                print(f"  Keeping partial file for resume on next run", file=sys.stderr)
+            elif out_path.exists():
+                out_path.unlink()  # Remove partial for non-resume-able errors
+            if attempt < retries:
+                wait = 60 * attempt
+                print(f"  Retrying in {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+            else:
+                return False
 
     if expected_md5:
         with open(out_path, "rb") as f:
