@@ -232,6 +232,8 @@ python scripts/python/download_cellranger_data.py
 
 If you previously downloaded scATAC via ENA, remove those run dirs and re-run to get the 3-file layout.
 
+**fasterq-dump exit code 3 / `rcNotFound` during concat:** Large scATAC runs write many temp chunks, then merge them. This error usually means **not enough free space** on the temp volume (including `fasterq.tmp.*` under the project directory), or a **failed/interrupted** merge. Fix: `df -h` on your data disk; remove stale `fasterq.tmp.*` dirs and any partial `SRR*_*.fastq` in the failed run folder; re-run with a **large scratch path**: `python scripts/python/download_cellranger_data.py --runs SRR22882163 --fasterq-temp-dir /path/with/100GB+free`. You can also set `CHROMATIN_HF_FASTERQ_TEMP` or `TMPDIR` to that path. Optional: `--fasterq-threads 8` if the machine runs out of memory.
+
 ### 6.3 Run Cell Ranger wrapper
 
 After `scripts/python/download_cellranger_data.py` and `scripts/python/download_cellranger_refs.py`:

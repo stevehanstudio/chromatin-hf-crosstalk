@@ -14,6 +14,10 @@ Includes:
 Run from project root:
   python scripts/python/download_cellranger_data.py --minimal   # ~150 GB, 15 runs
   python scripts/python/download_cellranger_data.py             # full 31 runs (~500 GB)
+
+If fasterq-dump exits with code 3 / ``rcNotFound`` during concat (large scATAC runs):
+  free disk space (temp + output need headroom), remove ``fasterq.tmp.*`` dirs in CWD,
+  pass ``--fasterq-temp-dir /path/to/big/scratch``, and retry failed SRR with ``--runs``.
 """
 
 import argparse
@@ -21,6 +25,7 @@ import hashlib
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -183,14 +188,37 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
     return ok
 
 
-def download_with_fasterq_dump(run_id: str, out_dir: Path, scatac: bool = False) -> bool:
+def _clear_partial_fasterq_outputs(run_dir: Path, run_id: str) -> None:
+    """Remove incomplete fasterq-dump .fastq so a retry is not skipped as 'done'."""
+    for p in run_dir.glob(f"{run_id}_*.fastq"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+
+def download_with_fasterq_dump(
+    run_id: str,
+    out_dir: Path,
+    scatac: bool = False,
+    *,
+    temp_dir: Path | None = None,
+    threads: int | None = None,
+    retries: int = 2,
+) -> bool:
     """Use SRA fasterq-dump (requires sra-tools).
-    For scATAC: use --split-files --include-technical to get R1,R2,I2 (ENA has only 2 files).
+    For scATAC: use --split-files --include-technical to get R1,R2,I2 (ENA has only 2 FASTQs).
     Skips if expected output files already exist (resume-friendly).
+
+    ``temp_dir`` should be on a volume with ample free space (scATAC can use 100+ GB
+    transient files during concat). If None, uses CHROMATIN_HF_FASTERQ_TEMP, TMPDIR,
+    or system temp.
+
+    Exit code 3 with ``KDirectoryFileSize`` / ``rcNotFound`` usually means the temp
+    volume filled up or temp chunks were lost — use a larger ``--fasterq-temp-dir``.
     """
     run_dir = out_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    # Skip if already downloaded (fasterq-dump produces .fastq, not .gz)
     min_size = 10_000  # bytes; avoid skipping tiny partials
     if scatac:
         expected = [run_dir / f"{run_id}_{i}.fastq" for i in (1, 2, 3)]
@@ -199,21 +227,56 @@ def download_with_fasterq_dump(run_id: str, out_dir: Path, scatac: bool = False)
     if all(p.exists() and p.stat().st_size >= min_size for p in expected):
         print(f"  Skip (exists): {', '.join(p.name for p in expected)}")
         return True
+
+    if temp_dir is None:
+        env_tmp = os.environ.get("CHROMATIN_HF_FASTERQ_TEMP") or os.environ.get("TMPDIR")
+        if env_tmp:
+            base = Path(env_tmp)
+        else:
+            base = Path(tempfile.gettempdir())
+        temp_dir = base / "chromatin_hf_fasterq"
+    else:
+        temp_dir = Path(temp_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    nthr = threads if threads is not None else min(16, max(1, os.cpu_count() or 4))
+
     cmd = [
         "fasterq-dump",
         run_id,
         "-O", str(run_dir),
         "-f",
-        "-e", str(os.cpu_count() or 4),
+        "-e", str(nthr),
+        "--temp", str(temp_dir),
     ]
     if scatac:
         cmd.extend(["--split-files", "--include-technical"])
-    try:
-        subprocess.run(cmd, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"  fasterq-dump failed: {e}", file=sys.stderr)
-        return False
+
+    env = os.environ.copy()
+    env["TMPDIR"] = str(temp_dir)
+
+    last_err: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            subprocess.run(cmd, check=True, env=env)
+            if all(p.exists() and p.stat().st_size >= min_size for p in expected):
+                return True
+            print(
+                f"  fasterq-dump finished but outputs missing or tiny (attempt {attempt}/{retries})",
+                file=sys.stderr,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            last_err = e
+            print(f"  fasterq-dump failed (attempt {attempt}/{retries}): {e}", file=sys.stderr)
+        if attempt < retries:
+            _clear_partial_fasterq_outputs(run_dir, run_id)
+            wait = 30 * attempt
+            print(f"  Retrying in {wait}s after clearing partial FASTQs...", file=sys.stderr)
+            time.sleep(wait)
+
+    if last_err:
+        print(f"  fasterq-dump gave up after {retries} attempts.", file=sys.stderr)
+    return False
 
 
 def main():
@@ -247,6 +310,25 @@ def main():
         action="store_true",
         help="Verify MD5 checksums (slower)",
     )
+    parser.add_argument(
+        "--fasterq-temp-dir",
+        type=Path,
+        default=None,
+        help="Directory for fasterq-dump temp files (large scATAC runs need 100+ GB free; "
+        "default: CHROMATIN_HF_FASTERQ_TEMP, TMPDIR, or system temp)",
+    )
+    parser.add_argument(
+        "--fasterq-threads",
+        type=int,
+        default=None,
+        help="Threads for fasterq-dump -e (default: min(16, CPUs); lower if OOM)",
+    )
+    parser.add_argument(
+        "--fasterq-retries",
+        type=int,
+        default=2,
+        help="Retries per SRR if fasterq-dump fails (default: 2)",
+    )
     args = parser.parse_args()
 
     if args.runs:
@@ -265,6 +347,8 @@ def main():
     est_gb = "~150" if (args.minimal and not args.runs) else f"~{max(50, len(runs) * 16)}"
     print(f"Downloading {len(runs)} runs to {args.output_dir}")
     print(f"Estimated disk: {est_gb} GB. Ensure sufficient space.\n")
+    if args.fasterq_temp_dir:
+        print(f"fasterq-dump temp: {args.fasterq_temp_dir.resolve()}\n")
 
     failed = []
     for i, run_id in enumerate(runs, 1):
@@ -274,7 +358,14 @@ def main():
         if args.use_sra or is_scatac:
             if is_scatac and not args.use_sra:
                 print("  (scATAC requires SRA; ENA has only 2 FASTQs, cellranger-atac needs I2)")
-            ok = download_with_fasterq_dump(run_id, args.output_dir, scatac=is_scatac)
+            ok = download_with_fasterq_dump(
+                run_id,
+                args.output_dir,
+                scatac=is_scatac,
+                temp_dir=args.fasterq_temp_dir,
+                threads=args.fasterq_threads,
+                retries=max(1, args.fasterq_retries),
+            )
         else:
             ok = download_run_ena(run_id, args.output_dir, md5_checks=args.md5)
         if not ok:
