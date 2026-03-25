@@ -12,8 +12,12 @@ Includes:
   - scATAC-seq (10x): Whole heart + CD45+ nuclei
 
 Run from project root:
-  python scripts/python/download_cellranger_data.py --minimal   # ~150 GB, 15 runs
-  python scripts/python/download_cellranger_data.py             # full 31 runs (~500 GB)
+  python scripts/python/download_cellranger_data.py --minimal   # 15 runs; see disk note below
+  python scripts/python/download_cellranger_data.py             # all 31 runs
+
+Disk (uncompressed .fastq): scATAC runs are very large (often hundreds of GB each).
+``--minimal`` still includes 5 scATAC libraries — plan on the order of 1–4 TB for FASTQs alone,
+plus temp space for fasterq-dump. Older "~150 GB total" estimates were wrong for this layout.
 
 If fasterq-dump exits with code 3 / ``rcNotFound`` during concat (large scATAC runs):
   free disk space (temp + output need headroom), remove ``fasterq.tmp.*`` dirs in CWD,
@@ -38,7 +42,8 @@ SCATAC_RUNS = {
     "SRR22882164", "SRR22882165", "SRR22882166", "SRR22882167",
 }
 
-# Minimal subset (~150 GB): one rep per condition for Figs 1-5
+# Minimal subset (15 runs): one rep per condition for Figs 1-5 — includes 5 scATAC + 10 scRNA/snRNA
+# (disk: order ~1–4 TB uncompressed FASTQs; scATAC dominates, not ~150 GB total)
 # scATAC: whole heart TAC/Brd4KO, CD45+ Sham/TAC/Brd4KO
 # scRNA: Sham/TAC/JQ1, CD45+, snRNA TAC/Brd4KO, IgG/anti-IL1B
 MINIMAL_RUNS = [
@@ -279,6 +284,19 @@ def download_with_fasterq_dump(
     return False
 
 
+def estimate_disk_hint(runs: list[str]) -> str:
+    """Order-of-magnitude for uncompressed FASTQs (fasterq-dump output is not gzip)."""
+    n_atac = sum(1 for r in runs if r in SCATAC_RUNS)
+    n_other = len(runs) - n_atac
+    low_gb = n_atac * 200 + n_other * 8
+    high_gb = n_atac * 700 + n_other * 40
+    tb_lo, tb_hi = low_gb / 1024, high_gb / 1024
+    return (
+        f"~{tb_lo:.1f}–{tb_hi:.1f} TB FASTQs ({n_atac} scATAC + {n_other} scRNA/snRNA; wide range per run). "
+        "Budget extra temp space for fasterq-dump during scATAC merges."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Download scRNA-seq and scATAC-seq data for Cell Ranger (x86)"
@@ -297,13 +315,13 @@ def main():
     parser.add_argument(
         "--minimal",
         action="store_true",
-        help="Download minimal subset (~150 GB) for Figs 1-5 (15 runs instead of 31)",
+        help="Download minimal subset (15 runs, ~1–4 TB FASTQs — mostly scATAC) for Figs 1-5",
     )
     parser.add_argument(
         "--runs",
         nargs="+",
         default=None,
-        help="Specific run IDs (overrides --minimal). Default: all 31 runs (~500 GB)",
+        help="Specific run IDs (overrides --minimal). Default: all 31 runs (multi-TB FASTQs)",
     )
     parser.add_argument(
         "--md5",
@@ -335,7 +353,7 @@ def main():
         runs = args.runs
     elif args.minimal:
         runs = MINIMAL_RUNS
-        print("Using --minimal: 15 runs (~150 GB) for Figs 1-5\n")
+        print("Using --minimal: 15 runs for Figs 1-5 (includes 5 large scATAC libraries)\n")
     else:
         runs = list(CELLRANGER_RUNS)
     for r in runs:
@@ -344,9 +362,8 @@ def main():
             sys.exit(1)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    est_gb = "~150" if (args.minimal and not args.runs) else f"~{max(50, len(runs) * 16)}"
     print(f"Downloading {len(runs)} runs to {args.output_dir}")
-    print(f"Estimated disk: {est_gb} GB. Ensure sufficient space.\n")
+    print(f"Estimated FASTQ disk: {estimate_disk_hint(runs)}\n")
     if args.fasterq_temp_dir:
         print(f"fasterq-dump temp: {args.fasterq_temp_dir.resolve()}\n")
 

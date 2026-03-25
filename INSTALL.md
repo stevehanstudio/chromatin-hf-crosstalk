@@ -219,14 +219,14 @@ Options: `--scrna-only`, `--atac-only`, `-o /path/to/refs`
 ### 6.2 Download FASTQs
 
 ```bash
-# Minimal subset (~150 GB, 15 runs) — one rep per condition for Figs 1-5
+# Minimal subset (15 runs) — one rep per condition for Figs 1-5 (~1–4 TB uncompressed FASTQs; 5 scATAC dominate)
 python scripts/python/download_cellranger_data.py --minimal
 
-# Full replication (31 runs, ~500 GB)
+# Full replication (31 runs; multi-TB FASTQs)
 python scripts/python/download_cellranger_data.py
 ```
 
-- **--minimal:** Downloads 15 runs instead of 31; sufficient for Figs 1-5.
+- **--minimal:** Downloads 15 runs instead of 31; sufficient for Figs 1-5. Includes **five scATAC** libraries — each is often **hundreds of GB** as uncompressed `.fastq` from `fasterq-dump` (not ~150 GB total).
 - **scRNA/snRNA:** Uses ENA by default (2 FASTQs per run).
 - **scATAC:** ENA provides only 2 FASTQs; 10x needs R1, I2 (barcode), R2. The script auto-uses SRA (`fasterq-dump --split-files --include-technical`) for scATAC runs. Install `sra-tools` (`conda install -c bioconda sra-tools`).
 

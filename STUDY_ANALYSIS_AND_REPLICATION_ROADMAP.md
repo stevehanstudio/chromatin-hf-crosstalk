@@ -98,14 +98,14 @@ The super-series **GSE221699** contains 57 samples across 6 sub-series:
 | Script | Data | Disk space | Run on |
 |--------|------|------------|--------|
 | **scripts/python/download_data.py** | Bulk RNA-seq, ChIP-seq, CUT&RUN, sorted fibroblasts | **~150 GB** | Any machine (ARM64, x86) |
-| **scripts/python/download_cellranger_data.py** | scRNA-seq, snRNA-seq, scATAC-seq (10x) | ~150 GB (--minimal) or ~500 GB | x86 only (Cell Ranger) |
+| **scripts/python/download_cellranger_data.py** | scRNA-seq, snRNA-seq, scATAC-seq (10x) | ~1–4 TB (--minimal; scATAC is huge) / multi-TB (full) | x86 only (Cell Ranger) |
 
 ```bash
 # Main download (bulk, ChIP, CUT&RUN) — run on any machine
 python scripts/python/download_data.py
 
 # Cell Ranger data (scRNA, scATAC) — run on x86 where Cell Ranger is installed
-python scripts/python/download_cellranger_data.py --minimal   # ~150 GB for Figs 1-5
+python scripts/python/download_cellranger_data.py --minimal   # ~1–4 TB FASTQs for Figs 1-5 (5 scATAC)
 # python scripts/python/download_cellranger_data.py           # full 31 runs (~500 GB)
 ```
 
