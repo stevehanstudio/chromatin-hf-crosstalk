@@ -3,6 +3,7 @@ data/
 
 # Pipeline outputs (Cell Ranger, bulk RNA-seq, etc.)
 output/
+results/
 
 # 10x Cell Ranger install tarballs
 cellranger*.tar.gz
@@ -32,6 +33,16 @@ env/
 work/
 .nextflow/
 .nextflow.log*
+.nextflow.cache/
+.nextflow_history
+timeline.html
+report.html
+trace.txt
+dag.svg
+
+# nf-core outputs / reports (when using --outdir)
+pipeline_info/
+multiqc/
 
 # IDE
 .idea/
@@ -47,6 +58,10 @@ Thumbs.db
 *.log
 *.tmp
 *.temp
+fasterq.tmp.*
+tmp/
+temp/
+scratch/
 
 # Jupyter
 .ipynb_checkpoints/
