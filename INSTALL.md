@@ -251,6 +251,8 @@ The script creates 10x-compatible symlinks and runs `cellranger count` (22 scRNA
 | Tool | Purpose | Install |
 |------|---------|---------|
 | **HOMER** | Motif enrichment | `conda install -c bioconda homer` |
+| **samtools** | BAM sort/index (IGV requires `.bai`) | `conda install -c bioconda -c conda-forge samtools` or `sudo apt install samtools` |
+| **IGV** | Genome browser for BAM/peaks | Download IGV desktop app; open BAM + `.bai` + BED/narrowPeak |
 
 ---
 
@@ -280,6 +282,8 @@ The script creates 10x-compatible symlinks and runs `cellranger count` (22 scRNA
 | **BSgenome download timeout** | `options(timeout=600)` in R, then retry; or install one at a time |
 | **"Enter one or more numbers"** (update prompt) | Choose **3: None** to skip and continue |
 | **R code in bash** | Run R first (`R`), then paste commands; or use `R -e 'command'` |
+| **IGV says “Index is required” when opening a BAM** | Create an index with `samtools index <bam>` (requires BAM to be coordinate-sorted; see next row) |
+| **`samtools index` fails: “cannot be indexed” / “Unsorted positions” / `NO_COOR reads not in a single block`** | Sort first, then index: `samtools sort -o sample.sorted.bam sample.bam && samtools index sample.sorted.bam` |
 
 ---
 
