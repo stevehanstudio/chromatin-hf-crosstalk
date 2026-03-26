@@ -97,6 +97,9 @@ def run_cellranger_count(
     cmd = [
         "cellranger", "count",
         "--id", run_id,
+        # Cell Ranger v10 requires an explicit create-bam true/false argument.
+        # We default to true to produce the standard outputs (including BAMs).
+        "--create-bam", "true",
         "--transcriptome", str(ref),
         "--fastqs", str(fastq_dir),
         "--sample", run_id,
