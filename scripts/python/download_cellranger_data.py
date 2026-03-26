@@ -103,6 +103,10 @@ def download_with_curl(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "curl", "-f", "-L", "-C", "-",
+        # ENA links for very large FASTQs can drop mid-transfer; these flags improve resiliency.
+        "--retry-all-errors",
+        "--retry-connrefused",
+        "--http1.1",
         "--max-time", str(max_time),
         "--connect-timeout", "120",
         "--retry", "2", "--retry-delay", "30",
