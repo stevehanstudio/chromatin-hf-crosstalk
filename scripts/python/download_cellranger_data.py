@@ -95,11 +95,17 @@ def download_with_curl(
     url: str,
     out_path: Path,
     expected_md5: str | None = None,
+    expected_bytes: int | None = None,
     *,
     max_time: int = 21600,
     retries: int = 3,
 ) -> bool:
-    """Download file using curl. Uses 6h timeout, resume (-C -), and retries for large files."""
+    """
+    Download file using curl. Uses 6h timeout, resume (-C -), and retries for large files.
+
+    If `expected_bytes` is provided, a size mismatch is treated as an incomplete/truncated
+    download (even if `--md5` is not enabled).
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "curl", "-f", "-L", "-C", "-",
@@ -138,6 +144,11 @@ def download_with_curl(
         if digest != expected_md5:
             print(f"  MD5 mismatch: got {digest}, expected {expected_md5}", file=sys.stderr)
             return False
+    if expected_bytes is not None:
+        got = out_path.stat().st_size
+        if got != expected_bytes:
+            print(f"  Size mismatch: got {got} bytes, expected {expected_bytes} bytes", file=sys.stderr)
+            return False
     return True
 
 
@@ -145,7 +156,10 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
     """Fetch FASTQ URLs from ENA and download."""
     import urllib.request
 
-    url = f"https://www.ebi.ac.uk/ena/portal/api/filereport?accession={run_id}&result=read_run&fields=fastq_ftp,fastq_md5"
+    url = (
+        "https://www.ebi.ac.uk/ena/portal/api/filereport"
+        f"?accession={run_id}&result=read_run&fields=fastq_ftp,fastq_md5,fastq_bytes"
+    )
     req = urllib.request.Request(url, headers={"User-Agent": "Chromatin-HF-Download/1.0"})
     with urllib.request.urlopen(req) as resp:
         text = resp.read().decode()
@@ -159,6 +173,7 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
     data = dict(zip(headers, vals))
     fastq_ftp = data.get("fastq_ftp", "")
     fastq_md5 = data.get("fastq_md5", "")
+    fastq_bytes = data.get("fastq_bytes", "")
 
     if not fastq_ftp:
         print(f"  No FASTQ FTP for {run_id}", file=sys.stderr)
@@ -179,6 +194,11 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
             urls.append(f"https://{u}")
     md5_list = (fastq_md5.split(";") if fastq_md5 else [])
     md5s = [md5_list[i] if i < len(md5_list) else None for i in range(len(urls))]
+    bytes_list = (fastq_bytes.split(";") if fastq_bytes else [])
+    sizes = [
+        int(bytes_list[i]) if i < len(bytes_list) and bytes_list[i] else None
+        for i in range(len(urls))
+    ]
 
     run_dir = out_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -186,17 +206,29 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
     MIN_VALID_SIZE = 1000  # bytes; smaller = likely partial/failed
     for i, (u, m) in enumerate(zip(urls, md5s)):
         fname = Path(u).name
+        expected_size = sizes[i] if i < len(sizes) else None
         out_path = run_dir / fname
+        if expected_size is not None:
+            print(f"  Expected {fname}: {expected_size/1024**3:.2f} GB")
         if out_path.exists():
             if out_path.stat().st_size < MIN_VALID_SIZE:
                 out_path.unlink()  # Remove tiny/empty partial so we re-download
-            elif not m or hashlib.md5(out_path.read_bytes()).hexdigest() == m:
-                print(f"  Skip (exists): {fname}")
+            elif expected_size is not None and out_path.stat().st_size == expected_size:
+                # When MD5 is not enabled, size is a strong signal for a complete download.
+                print(f"  Skip (exists, size ok): {fname}")
                 continue
             else:
-                out_path.unlink()  # MD5 mismatch; remove so we re-download
+                if md5_checks and m and hashlib.md5(out_path.read_bytes()).hexdigest() == m:
+                    print(f"  Skip (exists, md5 ok): {fname}")
+                    continue
+                out_path.unlink()  # size or md5 mismatch; remove so we re-download
         print(f"  Downloading {fname} ...")
-        if not download_with_curl(u, out_path, m if md5_checks else None):
+        if not download_with_curl(
+            u,
+            out_path,
+            m if md5_checks else None,
+            expected_bytes=expected_size,
+        ):
             ok = False
     return ok
 
