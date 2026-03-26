@@ -184,13 +184,13 @@ def main():
     parser.add_argument(
         "--ref-scrna",
         type=Path,
-        required=True,
+        required=False,
         help="Path to scRNA mm10 reference (e.g. refdata-gex-mm10-2020-A)",
     )
     parser.add_argument(
         "--ref-atac",
         type=Path,
-        required=True,
+        required=False,
         help="Path to scATAC mouse reference (e.g. refdata-cellranger-arc-GRCm39-2024-A)",
     )
     parser.add_argument(
@@ -229,22 +229,34 @@ def main():
             print(f"Unknown run: {r}", file=sys.stderr)
             sys.exit(1)
 
-    if not args.ref_scrna.exists():
-        print(f"Error: scRNA reference not found: {args.ref_scrna}", file=sys.stderr)
-        sys.exit(1)
-    if not args.ref_atac.exists():
-        print(f"Error: scATAC reference not found: {args.ref_atac}", file=sys.stderr)
-        sys.exit(1)
-
-    # Resolve to absolute paths so they work when subprocess cwd=output_dir
-    ref_scrna = args.ref_scrna.resolve()
-    ref_atac = args.ref_atac.resolve()
     fastq_dir = args.fastq_dir.resolve()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     scrna_runs = [r for r in runs if "scATAC" not in CELLRANGER_RUNS[r][0]]
     atac_runs = [r for r in runs if "scATAC" in CELLRANGER_RUNS[r][0]]
+
+    if scrna_runs:
+        if not args.ref_scrna:
+            print("Error: --ref-scrna is required when running scRNA/snRNA runs", file=sys.stderr)
+            sys.exit(1)
+        if not args.ref_scrna.exists():
+            print(f"Error: scRNA reference not found: {args.ref_scrna}", file=sys.stderr)
+            sys.exit(1)
+        ref_scrna = args.ref_scrna.resolve()
+    else:
+        ref_scrna = None
+
+    if atac_runs:
+        if not args.ref_atac:
+            print("Error: --ref-atac is required when running scATAC runs", file=sys.stderr)
+            sys.exit(1)
+        if not args.ref_atac.exists():
+            print(f"Error: scATAC reference not found: {args.ref_atac}", file=sys.stderr)
+            sys.exit(1)
+        ref_atac = args.ref_atac.resolve()
+    else:
+        ref_atac = None
 
     failed = []
 

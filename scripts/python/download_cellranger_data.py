@@ -165,10 +165,14 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
         u = u.strip()
         if not u:
             continue
-        if u.startswith("http"):
+        # Prefer HTTPS for ENA paths; FTP can fail on some networks with
+        # "Server denied you to change to the given directory" (curl 9).
+        if u.startswith("http://") or u.startswith("https://"):
             urls.append(u)
+        elif u.startswith("ftp://"):
+            urls.append("https://" + u[len("ftp://"):])
         else:
-            urls.append(f"ftp://{u}")
+            urls.append(f"https://{u}")
     md5_list = (fastq_md5.split(";") if fastq_md5 else [])
     md5s = [md5_list[i] if i < len(md5_list) else None for i in range(len(urls))]
 
