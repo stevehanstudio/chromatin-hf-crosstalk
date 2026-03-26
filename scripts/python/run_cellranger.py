@@ -101,8 +101,9 @@ def run_cellranger_count(
         "--fastqs", str(fastq_dir),
         "--sample", run_id,
     ]
-    if include_introns:
-        cmd.append("--include-introns")
+    # Cell Ranger v10 expects an explicit true/false value.
+    # Older versions accepted a bare flag; passing the explicit value works reliably.
+    cmd.extend(["--include-introns", "true" if include_introns else "false"])
     if localcores:
         cmd.extend(["--localcores", str(localcores)])
     if localmem:
