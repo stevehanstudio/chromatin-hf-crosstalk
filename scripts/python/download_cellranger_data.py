@@ -301,10 +301,19 @@ def download_run_ena(
                 print(f"  Skip (exists, size ok): {fname}")
                 continue
             else:
-                if md5_checks and m and hashlib.md5(out_path.read_bytes()).hexdigest() == m:
-                    print(f"  Skip (exists, md5 ok): {fname}")
-                    continue
-                out_path.unlink()  # size or md5 mismatch; remove so we re-download
+                # Keep partials for resume; deleting here causes restart from 0 on re-run.
+                # Only delete if file is clearly invalid (e.g., larger than expected).
+                current_size = out_path.stat().st_size
+                if expected_size is not None and current_size > expected_size:
+                    out_path.unlink()
+                elif md5_checks and m and expected_size is not None and current_size == expected_size:
+                    # Full-length file: verify checksum and only then skip.
+                    if hashlib.md5(out_path.read_bytes()).hexdigest() == m:
+                        print(f"  Skip (exists, md5 ok): {fname}")
+                        continue
+                    out_path.unlink()
+                else:
+                    print(f"  Resume (exists, partial): {fname} ({current_size / 1024**3:.2f} GB)")
         print(f"  Downloading {fname} ...")
         dl = download_with_wget if backend == "wget" else download_with_curl
         if not dl(
