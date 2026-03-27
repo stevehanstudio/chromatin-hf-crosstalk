@@ -260,14 +260,21 @@ def download_run_ena(
         u = u.strip()
         if not u:
             continue
-        # Prefer HTTPS for ENA paths; FTP can fail on some networks with
-        # "Server denied you to change to the given directory" (curl 9).
+        # Backend-aware URL normalization:
+        # - curl backend: prefer HTTPS (avoids some ftp directory errors).
+        # - wget backend: prefer native FTP because some ENA HTTPS endpoints return 403 to wget.
         if u.startswith("http://") or u.startswith("https://"):
             urls.append(u)
         elif u.startswith("ftp://"):
-            urls.append("https://" + u[len("ftp://"):])
+            if backend == "wget":
+                urls.append(u)
+            else:
+                urls.append("https://" + u[len("ftp://"):])
         else:
-            urls.append(f"https://{u}")
+            if backend == "wget":
+                urls.append(f"ftp://{u}")
+            else:
+                urls.append(f"https://{u}")
     md5_list = (fastq_md5.split(";") if fastq_md5 else [])
     md5s = [md5_list[i] if i < len(md5_list) else None for i in range(len(urls))]
     bytes_list = (fastq_bytes.split(";") if fastq_bytes else [])
