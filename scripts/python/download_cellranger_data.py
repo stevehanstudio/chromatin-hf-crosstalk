@@ -22,6 +22,11 @@ plus temp space for fasterq-dump. Older "~150 GB total" estimates were wrong for
 If fasterq-dump exits with code 3 / ``rcNotFound`` during concat (large scATAC runs):
   free disk space (temp + output need headroom), remove ``fasterq.tmp.*`` dirs in CWD,
   pass ``--fasterq-temp-dir /path/to/big/scratch``, and retry failed SRR with ``--runs``.
+
+Very large ENA HTTPS downloads sometimes fail with ``curl: (56) OpenSSL ... unexpected eof``.
+The downloader keeps partial files for resume (``curl -C -`` / ``wget -c``). If curl keeps failing,
+try ``--ena-backend wget`` or ``--use-sra`` (fasterq-dump; uncompressed ``.fastq`` — run_cellranger
+symlink helper supports that).
 """
 
 import argparse
@@ -97,25 +102,29 @@ def download_with_curl(
     expected_md5: str | None = None,
     expected_bytes: int | None = None,
     *,
-    max_time: int = 21600,
-    retries: int = 3,
+    max_time: int = 0,
+    retries: int = 20,
 ) -> bool:
     """
-    Download file using curl. Uses 6h timeout, resume (-C -), and retries for large files.
+    Download file using curl. Uses resume (-C -) and many short retries (large ENA drops are
+    mid-transfer TLS EOFs — exit 56, etc.). Default ``max_time=0`` means no per-invocation cap
+    so multi-hour resumes are possible.
 
     If `expected_bytes` is provided, a size mismatch is treated as an incomplete/truncated
     download (even if `--md5` is not enabled).
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    curl_max_time = str(max_time) if max_time > 0 else "0"
     cmd = [
         "curl", "-f", "-L", "-C", "-",
         # ENA links for very large FASTQs can drop mid-transfer; these flags improve resiliency.
         "--retry-all-errors",
         "--retry-connrefused",
         "--http1.1",
-        "--max-time", str(max_time),
+        "--max-time", curl_max_time,
         "--connect-timeout", "120",
-        "--retry", "2", "--retry-delay", "30",
+        "--retry", "5",
+        "--retry-delay", "10",
         "-o", str(out_path), url,
     ]
     for attempt in range(1, retries + 1):
@@ -127,12 +136,16 @@ def download_with_curl(
         except subprocess.CalledProcessError as e:
             stderr = (e.stderr or b"").decode(errors="replace")
             print(f"  Error (attempt {attempt}/{retries}): {stderr.strip() or str(e)}", file=sys.stderr)
-            if e.returncode in (18, 28) and out_path.exists() and out_path.stat().st_size > 1000:
-                print(f"  Keeping partial for resume", file=sys.stderr)
-            elif out_path.exists():
-                out_path.unlink()
+            # Never delete a substantive partial: curl -C - needs it to resume (old bug: only
+            # exit 18/28 kept partials, so TLS EOF=56 restarted from byte 0 every time).
+            if out_path.exists():
+                sz = out_path.stat().st_size
+                if sz <= 1000:
+                    out_path.unlink()
+                else:
+                    print(f"  Keeping partial ({sz / 1024**3:.2f} GB) for resume", file=sys.stderr)
             if attempt < retries:
-                wait = 60 * attempt
+                wait = min(300, 30 * attempt)
                 print(f"  Retrying in {wait}s...", file=sys.stderr)
                 time.sleep(wait)
             else:
@@ -152,7 +165,70 @@ def download_with_curl(
     return True
 
 
-def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bool:
+def download_with_wget(
+    url: str,
+    out_path: Path,
+    expected_md5: str | None = None,
+    expected_bytes: int | None = None,
+    *,
+    retries: int = 20,
+) -> bool:
+    """
+    Download with GNU wget ``-c`` (continue). Useful when curl hits repeated TLS EOF on ENA.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "wget",
+        "-O", str(out_path),
+        "-c",
+        "--timeout=300",
+        "--read-timeout=300",
+        "--tries=1",
+        url,
+    ]
+    for attempt in range(1, retries + 1):
+        try:
+            result = subprocess.run(cmd, capture_output=True)
+            if result.returncode == 0:
+                break
+            raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+        except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or b"").decode(errors="replace")
+            print(f"  Error (attempt {attempt}/{retries}): {stderr.strip() or str(e)}", file=sys.stderr)
+            if out_path.exists():
+                sz = out_path.stat().st_size
+                if sz <= 1000:
+                    out_path.unlink()
+                else:
+                    print(f"  Keeping partial ({sz / 1024**3:.2f} GB) for resume", file=sys.stderr)
+            if attempt < retries:
+                wait = min(300, 30 * attempt)
+                print(f"  Retrying in {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+            else:
+                return False
+
+    if expected_md5:
+        with open(out_path, "rb") as f:
+            digest = hashlib.md5(f.read()).hexdigest()
+        if digest != expected_md5:
+            print(f"  MD5 mismatch: got {digest}, expected {expected_md5}", file=sys.stderr)
+            return False
+    if expected_bytes is not None:
+        got = out_path.stat().st_size
+        if got != expected_bytes:
+            print(f"  Size mismatch: got {got} bytes, expected {expected_bytes} bytes", file=sys.stderr)
+            return False
+    return True
+
+
+def download_run_ena(
+    run_id: str,
+    out_dir: Path,
+    md5_checks: bool = False,
+    *,
+    backend: str = "curl",
+) -> bool:
     """Fetch FASTQ URLs from ENA and download."""
     import urllib.request
 
@@ -223,7 +299,8 @@ def download_run_ena(run_id: str, out_dir: Path, md5_checks: bool = False) -> bo
                     continue
                 out_path.unlink()  # size or md5 mismatch; remove so we re-download
         print(f"  Downloading {fname} ...")
-        if not download_with_curl(
+        dl = download_with_wget if backend == "wget" else download_with_curl
+        if not dl(
             u,
             out_path,
             m if md5_checks else None,
@@ -369,6 +446,12 @@ def main():
         help="Verify MD5 checksums (slower)",
     )
     parser.add_argument(
+        "--ena-backend",
+        choices=("curl", "wget"),
+        default="curl",
+        help="HTTP client for ENA FASTQs (default: curl). Use wget if curl hits repeated TLS EOF.",
+    )
+    parser.add_argument(
         "--fasterq-temp-dir",
         type=Path,
         default=None,
@@ -424,7 +507,12 @@ def main():
                 retries=max(1, args.fasterq_retries),
             )
         else:
-            ok = download_run_ena(run_id, args.output_dir, md5_checks=args.md5)
+            ok = download_run_ena(
+                run_id,
+                args.output_dir,
+                md5_checks=args.md5,
+                backend=args.ena_backend,
+            )
         if not ok:
             failed.append(run_id)
 

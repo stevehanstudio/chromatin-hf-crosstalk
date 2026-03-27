@@ -36,18 +36,20 @@ def create_symlinks(run_dir: Path, run_id: str) -> bool:
     Create 10x-style symlinks for ENA FASTQs.
     ENA: SRRxxxxx_1.fastq.gz, SRRxxxxx_2.fastq.gz
     10x: SRRxxxxx_S1_L001_R1_001.fastq.gz, SRRxxxxx_S1_L001_R2_001.fastq.gz
+    Also accepts uncompressed pairs from SRA (download_cellranger_data.py --use-sra).
     """
-    fq1 = run_dir / f"{run_id}_1.fastq.gz"
-    fq2 = run_dir / f"{run_id}_2.fastq.gz"
-    if not fq1.exists() or not fq2.exists():
-        return False
-
-    ln1 = run_dir / f"{run_id}_S1_L001_R1_001.fastq.gz"
-    ln2 = run_dir / f"{run_id}_S1_L001_R2_001.fastq.gz"
-    for src, dst in [(fq1, ln1), (fq2, ln2)]:
-        if not dst.exists():
-            dst.symlink_to(src.name)
-    return True
+    for ext in (".fastq.gz", ".fastq"):
+        fq1 = run_dir / f"{run_id}_1{ext}"
+        fq2 = run_dir / f"{run_id}_2{ext}"
+        if not fq1.exists() or not fq2.exists():
+            continue
+        ln1 = run_dir / f"{run_id}_S1_L001_R1_001{ext}"
+        ln2 = run_dir / f"{run_id}_S1_L001_R2_001{ext}"
+        for src, dst in [(fq1, ln1), (fq2, ln2)]:
+            if not dst.exists():
+                dst.symlink_to(src.name)
+        return True
+    return False
 
 
 def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
