@@ -56,8 +56,17 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
     """
     Create 10x-style symlinks for scATAC FASTQs from SRA (--split-files --include-technical).
     SRA: SRRxxxxx_1.fastq, SRRxxxxx_2.fastq, SRRxxxxx_3.fastq
-    10x Chromium: R1, I2 (16bp barcode), R2. Accepts .fastq or .fastq.gz.
+    Cell Ranger ATAC expects three reads named R1, I2, R2 (barcode on I2).
+
+    NCBI ``fasterq-dump`` typically orders spots as **R1, R2 (genomic), I2 (barcode)** — not
+    R1, I2, R2. Mapping _2->R2 and _3->I2 matches that layout and avoids the alignment error:
+    ``< 10% of read pairs have both an aligned 5' and aligned 3' end``.
+
+    If your run used a different SRA layout, set env ``CHROMATIN_HF_ATAC_SRA_ORDER=r1_i2_r2`` to
+    use the legacy mapping (_2->I2, _3->R2). Accepts .fastq or .fastq.gz.
     """
+    import os
+
     ext = None
     for e in (".fastq.gz", ".fastq"):
         if (run_dir / f"{run_id}_1{e}").exists():
@@ -70,13 +79,26 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
     fq3 = run_dir / f"{run_id}_3{ext}"
     if not fq1.exists() or not fq2.exists() or not fq3.exists():
         return False
-    # 10x Chromium scATAC: R1, I2 (barcode), R2
+    # Default: SRA order R1, R2, I2 -> 10x names R1, R2, I2
+    legacy = os.environ.get("CHROMATIN_HF_ATAC_SRA_ORDER", "").lower() == "r1_i2_r2"
     ln1 = run_dir / f"{run_id}_S1_L001_R1_001{ext}"
-    ln2 = run_dir / f"{run_id}_S1_L001_I2_001{ext}"
-    ln3 = run_dir / f"{run_id}_S1_L001_R2_001{ext}"
-    for src, dst in [(fq1, ln1), (fq2, ln2), (fq3, ln3)]:
-        if not dst.exists():
-            dst.symlink_to(src.name)
+    ln2 = run_dir / f"{run_id}_S1_L001_R2_001{ext}"
+    ln3 = run_dir / f"{run_id}_S1_L001_I2_001{ext}"
+    if legacy:
+        # Older assumption: SRA order R1, I2, R2
+        ln2 = run_dir / f"{run_id}_S1_L001_I2_001{ext}"
+        ln3 = run_dir / f"{run_id}_S1_L001_R2_001{ext}"
+        pairs = [(fq1, ln1), (fq2, ln2), (fq3, ln3)]
+    else:
+        pairs = [(fq1, ln1), (fq2, ln2), (fq3, ln3)]
+
+    for src, dst in pairs:
+        if dst.is_symlink() or dst.exists():
+            try:
+                dst.unlink()
+            except OSError:
+                pass
+        dst.symlink_to(src.name)
     return True
 
 
