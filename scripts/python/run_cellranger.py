@@ -78,6 +78,32 @@ def _median_seq_length_fastq(fq_path: Path, max_reads: int = 4000) -> float:
     return float(lengths[len(lengths) // 2])
 
 
+def _remove_stale_10x_atac_symlinks(run_dir: Path, run_id: str, ext: str) -> None:
+    """Delete prior ``Sample_S1_L001_*`` symlinks so I2/R3 from an old run cannot coexist."""
+    for p in run_dir.glob(f"{run_id}_S1_L001_*{ext}"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+
+def _barcode_file_index(m1: float, m2: float, m3: float) -> int | None:
+    """
+    Return which of _1/_2/_3 (0/1/2) is the short index read, or None if unclear.
+
+    Chromium scATAC index reads are ~16 bp; use a band so we never pick artifactual
+    minima (e.g. median ~8 bp) over a real ~24 bp index.
+    """
+    meds = (m1, m2, m3)
+    lo, hi = 14, 34
+    candidates = [i for i in range(3) if lo <= meds[i] <= hi]
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        return min(candidates, key=lambda i: meds[i])
+    return None
+
+
 def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
     """
     Create 10x-style symlinks for scATAC FASTQs from SRA (--split-files --include-technical).
@@ -112,6 +138,8 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
     if not fq1.exists() or not fq2.exists() or not fq3.exists():
         return False
 
+    _remove_stale_10x_atac_symlinks(run_dir, run_id, ext)
+
     layout = os.environ.get("CHROMATIN_HF_ATAC_LAYOUT", "auto").lower().strip()
     # Back-compat: old env only toggled I2 order
     if os.environ.get("CHROMATIN_HF_ATAC_SRA_ORDER", "").lower() == "r1_i2_r2":
@@ -138,26 +166,21 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
         pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
         note = "Epi R1,R3,R2 (barcode in _3)"
     elif layout in ("epi", "auto"):
-        # Pick shortest file as barcode; assign Epi R1 / R2(barcode) / R3(genomic)
-        imin = min(range(3), key=lambda i: meds[i])
-        short, longish = min(meds), max(meds)
-        if short <= 0 or (longish > 45 and short < 35):
-            if imin == 0:
-                # Barcode in _1 — rare: Epi R2(bc)<-_1, R1<-_2, R3<-_3
-                pairs = [(fq1, ln_r2), (fq2, ln_r1), (fq3, ln_r3)]
-                note = "Epi R2,R1,R3 (barcode in _1)"
-            elif imin == 1:
-                # Barcode in _2: R1, R2(bc), R3
-                pairs = [(fq1, ln_r1), (fq2, ln_r2), (fq3, ln_r3)]
-                note = "Epi R1,R2,R3 (barcode in _2)"
-            else:
-                # Barcode in _3: R1, R3(gen), R2(bc)
-                pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
-                note = "Epi R1,R3,R2 (barcode in _3)"
-        else:
-            # Lengths ambiguous — default to barcode-last (common for this project's SRA dumps)
+        # Epi naming: R1, R2(barcode), R3 — only one of I2 vs R2/R3 schemes; no mixing with stale I2.
+        bidx = _barcode_file_index(m1, m2, m3)
+        if bidx is None:
+            # Typical for GSE221696 SRA: genomic, genomic, index in _3
             pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
-            note = "Epi R1,R3,R2 (ambiguous lengths; default barcode _3)"
+            note = "Epi R1,R3,R2 (index length unclear; default barcode _3)"
+        elif bidx == 0:
+            pairs = [(fq1, ln_r2), (fq2, ln_r1), (fq3, ln_r3)]
+            note = "Epi R2,R1,R3 (barcode in _1)"
+        elif bidx == 1:
+            pairs = [(fq1, ln_r1), (fq2, ln_r2), (fq3, ln_r3)]
+            note = "Epi R1,R2,R3 (barcode in _2)"
+        else:
+            pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+            note = "Epi R1,R3,R2 (barcode in _3)"
     else:
         print(f"  Warning: unknown CHROMATIN_HF_ATAC_LAYOUT={layout!r}, using auto", file=sys.stderr)
         pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
