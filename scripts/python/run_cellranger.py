@@ -52,18 +52,50 @@ def create_symlinks(run_dir: Path, run_id: str) -> bool:
     return False
 
 
+def _median_seq_length_fastq(fq_path: Path, max_reads: int = 4000) -> float:
+    """Median read length from the first ``max_reads`` reads (cheap QC for layout)."""
+    import gzip
+
+    opener = gzip.open if str(fq_path).endswith(".gz") else open
+    lengths: list[int] = []
+    try:
+        with opener(fq_path, "rb") as fh:  # type: ignore[arg-type]
+            for _ in range(max_reads):
+                h = fh.readline()
+                if not h:
+                    break
+                seq = fh.readline()
+                if not seq:
+                    break
+                fh.readline()
+                fh.readline()
+                lengths.append(len(seq.strip()))
+    except OSError:
+        return 0.0
+    if not lengths:
+        return 0.0
+    lengths.sort()
+    return float(lengths[len(lengths) // 2])
+
+
 def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
     """
     Create 10x-style symlinks for scATAC FASTQs from SRA (--split-files --include-technical).
-    SRA: SRRxxxxx_1.fastq, SRRxxxxx_2.fastq, SRRxxxxx_3.fastq
-    Cell Ranger ATAC expects three reads named R1, I2, R2 (barcode on I2).
 
-    NCBI ``fasterq-dump`` typically orders spots as **R1, R2 (genomic), I2 (barcode)** — not
-    R1, I2, R2. Mapping _2->R2 and _3->I2 matches that layout and avoids the alignment error:
-    ``< 10% of read pairs have both an aligned 5' and aligned 3' end``.
+    10x documents **two** naming schemes; Epi ATAC often uses **R1, R2 (barcode/index), R3**
+    (second genomic insert), *not* ``I2`` + ``R2``. Using ``I2`` for the barcode when the
+    chemistry expects **R2** can pass ``ALIGN_ATAC_READS`` but fail later with:
+    ``Could not find any read pairs that were mapped in the correct orientation...`` in
+    ``MARK_ATAC_DUPLICATES``.
 
-    If your run used a different SRA layout, set env ``CHROMATIN_HF_ATAC_SRA_ORDER=r1_i2_r2`` to
-    use the legacy mapping (_2->I2, _3->R2). Accepts .fastq or .fastq.gz.
+    By default we **auto-detect** which of ``_1/_2/_3`` is the short barcode read (~16–30 bp)
+    and name files accordingly (Epi: barcode -> ``...R2...``, second genomic -> ``...R3...``).
+
+    Override with env (optional):
+
+    - ``CHROMATIN_HF_ATAC_LAYOUT=epi`` — force Epi ``R1,R2(barcode),R3`` (auto-detect order)
+    - ``CHROMATIN_HF_ATAC_LAYOUT=alt`` — alternative ``R1,I2(barcode),R2`` (SRA order ``r1_i2_r2``)
+    - ``CHROMATIN_HF_ATAC_LAYOUT=sra_r1_r2_i2`` — ``_1``->R1, ``_2``->R3, ``_3``->R2 (barcode last)
     """
     import os
 
@@ -79,18 +111,59 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
     fq3 = run_dir / f"{run_id}_3{ext}"
     if not fq1.exists() or not fq2.exists() or not fq3.exists():
         return False
-    # Default: SRA order R1, R2, I2 -> 10x names R1, R2, I2
-    legacy = os.environ.get("CHROMATIN_HF_ATAC_SRA_ORDER", "").lower() == "r1_i2_r2"
-    ln1 = run_dir / f"{run_id}_S1_L001_R1_001{ext}"
-    ln2 = run_dir / f"{run_id}_S1_L001_R2_001{ext}"
-    ln3 = run_dir / f"{run_id}_S1_L001_I2_001{ext}"
-    if legacy:
-        # Older assumption: SRA order R1, I2, R2
-        ln2 = run_dir / f"{run_id}_S1_L001_I2_001{ext}"
-        ln3 = run_dir / f"{run_id}_S1_L001_R2_001{ext}"
-        pairs = [(fq1, ln1), (fq2, ln2), (fq3, ln3)]
+
+    layout = os.environ.get("CHROMATIN_HF_ATAC_LAYOUT", "auto").lower().strip()
+    # Back-compat: old env only toggled I2 order
+    if os.environ.get("CHROMATIN_HF_ATAC_SRA_ORDER", "").lower() == "r1_i2_r2":
+        layout = "alt"
+
+    ln_r1 = run_dir / f"{run_id}_S1_L001_R1_001{ext}"
+    ln_r2 = run_dir / f"{run_id}_S1_L001_R2_001{ext}"
+    ln_r3 = run_dir / f"{run_id}_S1_L001_R3_001{ext}"
+    ln_i2 = run_dir / f"{run_id}_S1_L001_I2_001{ext}"
+
+    m1 = _median_seq_length_fastq(fq1)
+    m2 = _median_seq_length_fastq(fq2)
+    m3 = _median_seq_length_fastq(fq3)
+    meds = (m1, m2, m3)
+
+    pairs: list[tuple[Path, Path]]
+
+    if layout == "alt":
+        # SRA order R1, I2(barcode), R2(genomic) — 10x "alternative" naming
+        pairs = [(fq1, ln_r1), (fq2, ln_i2), (fq3, ln_r2)]
+        note = "alt R1,I2,R2 (SRA r1,i2,r2)"
+    elif layout == "sra_r1_r2_i2":
+        # _1=R1, _2=genomic2 -> R3, _3=barcode -> R2 (Epi naming; barcode in file 3)
+        pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+        note = "Epi R1,R3,R2 (barcode in _3)"
+    elif layout in ("epi", "auto"):
+        # Pick shortest file as barcode; assign Epi R1 / R2(barcode) / R3(genomic)
+        imin = min(range(3), key=lambda i: meds[i])
+        short, longish = min(meds), max(meds)
+        if short <= 0 or (longish > 45 and short < 35):
+            if imin == 0:
+                # Barcode in _1 — rare: Epi R2(bc)<-_1, R1<-_2, R3<-_3
+                pairs = [(fq1, ln_r2), (fq2, ln_r1), (fq3, ln_r3)]
+                note = "Epi R2,R1,R3 (barcode in _1)"
+            elif imin == 1:
+                # Barcode in _2: R1, R2(bc), R3
+                pairs = [(fq1, ln_r1), (fq2, ln_r2), (fq3, ln_r3)]
+                note = "Epi R1,R2,R3 (barcode in _2)"
+            else:
+                # Barcode in _3: R1, R3(gen), R2(bc)
+                pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+                note = "Epi R1,R3,R2 (barcode in _3)"
+        else:
+            # Lengths ambiguous — default to barcode-last (common for this project's SRA dumps)
+            pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+            note = "Epi R1,R3,R2 (ambiguous lengths; default barcode _3)"
     else:
-        pairs = [(fq1, ln1), (fq2, ln2), (fq3, ln3)]
+        print(f"  Warning: unknown CHROMATIN_HF_ATAC_LAYOUT={layout!r}, using auto", file=sys.stderr)
+        pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+        note = "fallback Epi R1,R3,R2"
+
+    print(f"  scATAC FASTQ layout: {note} (median bp ~ {m1:.0f}, {m2:.0f}, {m3:.0f})")
 
     for src, dst in pairs:
         if dst.is_symlink() or dst.exists():
