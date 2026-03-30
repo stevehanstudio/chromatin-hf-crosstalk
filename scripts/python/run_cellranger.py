@@ -52,8 +52,14 @@ def create_symlinks(run_dir: Path, run_id: str) -> bool:
     return False
 
 
-def _median_seq_length_fastq(fq_path: Path, max_reads: int = 4000) -> float:
-    """Median read length from the first ``max_reads`` reads (cheap QC for layout)."""
+def _median_seq_length_fastq(
+    fq_path: Path, max_reads: int = 4000, *, min_len: int | None = None
+) -> float:
+    """Median read length from the first ``max_reads`` reads (cheap QC for layout).
+
+    If ``min_len`` is set, only reads with sequence length >= ``min_len`` are used
+    (helps when many short/technical spots skew the overall median).
+    """
     import gzip
 
     opener = gzip.open if str(fq_path).endswith(".gz") else open
@@ -69,7 +75,10 @@ def _median_seq_length_fastq(fq_path: Path, max_reads: int = 4000) -> float:
                     break
                 fh.readline()
                 fh.readline()
-                lengths.append(len(seq.strip()))
+                slen = len(seq.strip())
+                if min_len is not None and slen < min_len:
+                    continue
+                lengths.append(slen)
     except OSError:
         return 0.0
     if not lengths:
@@ -121,7 +130,16 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
 
     - ``CHROMATIN_HF_ATAC_LAYOUT=epi`` — force Epi ``R1,R2(barcode),R3`` (auto-detect order)
     - ``CHROMATIN_HF_ATAC_LAYOUT=alt`` — alternative ``R1,I2(barcode),R2`` (SRA order ``r1_i2_r2``)
-    - ``CHROMATIN_HF_ATAC_LAYOUT=sra_r1_r2_i2`` — ``_1``->R1, ``_2``->R3, ``_3``->R2 (barcode last)
+    - ``CHROMATIN_HF_ATAC_LAYOUT=sra_r1_r2_i2`` — barcode in ``_3``; genomic mapping follows
+      ``CHROMATIN_HF_ATAC_SWAP_GENOMIC`` (default: swap). Use ``sra_r1_r2_i2_noswap`` to force
+      ``_1``->R1, ``_2``->R3 without swapping.
+
+    For GSE221696-style SRA dumps (two genomic files + barcode in ``_3``), Cell Ranger often needs
+    **swapped genomic labels**: ``_1`` -> ``R3``, ``_2`` -> ``R1`` (fragment orientation). That
+    fixes ``MARK_ATAC_DUPLICATES`` when alignment succeeds but pairing does not.
+
+    - ``CHROMATIN_HF_ATAC_SWAP_GENOMIC=0`` — use ``_1``->R1, ``_2``->R3 (legacy; usually wrong for
+      this dataset)
     """
     import os
 
@@ -154,6 +172,15 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
     m2 = _median_seq_length_fastq(fq2)
     m3 = _median_seq_length_fastq(fq3)
     meds = (m1, m2, m3)
+    g1 = _median_seq_length_fastq(fq1, min_len=20)
+    g2 = _median_seq_length_fastq(fq2, min_len=20)
+    g3 = _median_seq_length_fastq(fq3, min_len=20)
+
+    swap_genomic = os.environ.get("CHROMATIN_HF_ATAC_SWAP_GENOMIC", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    )
 
     pairs: list[tuple[Path, Path]]
 
@@ -162,16 +189,27 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
         pairs = [(fq1, ln_r1), (fq2, ln_i2), (fq3, ln_r2)]
         note = "alt R1,I2,R2 (SRA r1,i2,r2)"
     elif layout == "sra_r1_r2_i2":
-        # _1=R1, _2=genomic2 -> R3, _3=barcode -> R2 (Epi naming; barcode in file 3)
+        # _3=barcode -> R2; genomic: default swap _1<->R3, _2<->R1
+        if swap_genomic:
+            pairs = [(fq1, ln_r3), (fq2, ln_r1), (fq3, ln_r2)]
+            note = "Epi R3,R1,R2 (barcode _3; swap genomic)"
+        else:
+            pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+            note = "Epi R1,R3,R2 (barcode _3; no swap)"
+    elif layout == "sra_r1_r2_i2_noswap":
         pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
-        note = "Epi R1,R3,R2 (barcode in _3)"
+        note = "Epi R1,R3,R2 (barcode _3; forced no swap)"
     elif layout in ("epi", "auto"):
         # Epi naming: R1, R2(barcode), R3 — only one of I2 vs R2/R3 schemes; no mixing with stale I2.
         bidx = _barcode_file_index(m1, m2, m3)
         if bidx is None:
-            # Typical for GSE221696 SRA: genomic, genomic, index in _3
-            pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
-            note = "Epi R1,R3,R2 (index length unclear; default barcode _3)"
+            # Typical for GSE221696 SRA: two genomic + index in _3; swap genomic ends for Cell Ranger.
+            if swap_genomic:
+                pairs = [(fq1, ln_r3), (fq2, ln_r1), (fq3, ln_r2)]
+                note = "Epi R3,R1,R2 (default barcode _3; swap genomic)"
+            else:
+                pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+                note = "Epi R1,R3,R2 (default barcode _3; no swap)"
         elif bidx == 0:
             pairs = [(fq1, ln_r2), (fq2, ln_r1), (fq3, ln_r3)]
             note = "Epi R2,R1,R3 (barcode in _1)"
@@ -179,14 +217,26 @@ def create_symlinks_atac(run_dir: Path, run_id: str) -> bool:
             pairs = [(fq1, ln_r1), (fq2, ln_r2), (fq3, ln_r3)]
             note = "Epi R1,R2,R3 (barcode in _2)"
         else:
-            pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
-            note = "Epi R1,R3,R2 (barcode in _3)"
+            if swap_genomic:
+                pairs = [(fq1, ln_r3), (fq2, ln_r1), (fq3, ln_r2)]
+                note = "Epi R3,R1,R2 (barcode in _3; swap genomic)"
+            else:
+                pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+                note = "Epi R1,R3,R2 (barcode in _3; no swap)"
     else:
         print(f"  Warning: unknown CHROMATIN_HF_ATAC_LAYOUT={layout!r}, using auto", file=sys.stderr)
-        pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
-        note = "fallback Epi R1,R3,R2"
+        if swap_genomic:
+            pairs = [(fq1, ln_r3), (fq2, ln_r1), (fq3, ln_r2)]
+            note = "fallback Epi R3,R1,R2 (swap genomic)"
+        else:
+            pairs = [(fq1, ln_r1), (fq2, ln_r3), (fq3, ln_r2)]
+            note = "fallback Epi R1,R3,R2"
 
-    print(f"  scATAC FASTQ layout: {note} (median bp ~ {m1:.0f}, {m2:.0f}, {m3:.0f})")
+    print(
+        f"  scATAC FASTQ layout: {note} "
+        f"(median bp all ~ {m1:.0f}, {m2:.0f}, {m3:.0f}; "
+        f"len>=20 ~ {g1:.0f}, {g2:.0f}, {g3:.0f})"
+    )
 
     for src, dst in pairs:
         if dst.is_symlink() or dst.exists():
