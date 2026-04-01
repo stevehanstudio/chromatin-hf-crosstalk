@@ -65,3 +65,7 @@ scratch/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# ArchR artifacts accidentally written under notebooks/
+notebooks/*.arrow
+notebooks/QualityControl/
