@@ -1,11 +1,11 @@
 # Chromatin Remodeling Drives Immune-Fibroblast Crosstalk in Heart Failure Pathogenesis
 
-Computational replication of Alexanian et al., *Nature* 2024 — dry lab workflows for scRNA-seq, scATAC-seq, bulk RNA-seq, ChIP-seq, and CUT&RUN data from the heart failure chromatin study.
+Computational replication of Alexanian et al., *Nature* 2024.  Dry lab workflows for scRNA-seq, scATAC-seq, bulk RNA-seq, ChIP-seq, and CUT&RUN data from the heart failure chromatin study.
 
 **Source:** Alexanian et al., Nature 2024 ([bioRxiv 2023.01.06.522937](https://www.biorxiv.org/content/10.1101/2023.01.06.522937))  
 **Data:** [GEO GSE221699](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE221699) | [BioProject PRJNA915384](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA915384)
 
-*Presentation project for UC Berkeley Extension **MCELLBIX110-122 Immunology** (Dr. Ian Fernandopulle). Not required for the course — created to replicate the study.*
+*Presentation project for UC Berkeley Extension **MCELLBIX110-122 Immunology** (Dr. Ian Fernandopulle). Not required for the course. Created to replicate the study.*
 
 ---
 
@@ -67,6 +67,8 @@ See [INSTALL.md](INSTALL.md) for full setup. ArchR requires `bioconductor-rhdf5`
 ```
 chromatin-hf-crosstalk/
 ├── README.md
+├── docs/
+│   └── workflow.md             # Mermaid: end-to-end pipeline + scATAC detail
 ├── environment.yml
 ├── INSTALL.md
 ├── STUDY_ANALYSIS_AND_REPLICATION_ROADMAP.md
@@ -140,6 +142,8 @@ ARM64: `scripts/python/download_data.py` (bulk, ChIP, CUT&RUN). x86: `scripts/py
 
 
 See [STUDY_ANALYSIS_AND_REPLICATION_ROADMAP.md](STUDY_ANALYSIS_AND_REPLICATION_ROADMAP.md) for full pipeline details, QC parameters, and figure-to-analysis mapping.
+
+**End-to-end diagram (inputs/outputs and notebooks):** [docs/workflow.md](docs/workflow.md).
 
 ---
 
